@@ -59,7 +59,7 @@ jobs:
           ./sdkmanager --install platform-tools
           cd $BASEWORKDIR
           python3 build.py ndk
-          coverity_tool/bin/cov-build --dir cov-int python3 build.py all || true
+          coverity_tool/bin/cov-build --dir cov-int python3 build.py native || true
       - name: Compress with bzip2
         run: |
           tar cjvf myproject.tar.bz2 cov-int
