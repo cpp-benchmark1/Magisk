@@ -40,7 +40,7 @@ jobs:
           echo "Coverity Tool installed successfully"
       - name: Build with Coverity
         run: |
-          coverity_tool/bin/cov-build --dir cov-int make || true
+          coverity_tool/bin/cov-build --dir cov-int python3 build.py binary || true
       - name: Compress with bzip2
         run: |
           tar cjvf myproject.tar.bz2 cov-int
