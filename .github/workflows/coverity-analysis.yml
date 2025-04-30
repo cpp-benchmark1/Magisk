@@ -40,6 +40,7 @@ jobs:
           echo "Coverity Tool installed successfully"
       - name: Build with Coverity
         run: |
+          python3 build.py ndk
           coverity_tool/bin/cov-build --dir cov-int python3 build.py all || true
       - name: Compress with bzip2
         run: |
