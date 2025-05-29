@@ -45,7 +45,7 @@ jobs:
           echo "Coverity Tool installed successfully"
       - name: Build with Coverity
         run: |
-          sudo apt-get install -y git yasm curl wget gcc make cmake unzip build-essential
+          sudo apt-get install -y git yasm curl wget gcc cmake unzip build-essential
           BASEWORKDIR=$(pwd)
           wget https://dl.google.com/android/repository/commandlinetools-linux-9123335_latest.zip
           unzip commandlinetools-linux-9123335_latest.zip
