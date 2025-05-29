@@ -30,6 +30,7 @@ jobs:
     - if: matrix.build-mode == 'manual'
       shell: bash
       run: |
+        python3 build.py ndk
         python3 build.py all
     - name: Free disk space
       run: |
