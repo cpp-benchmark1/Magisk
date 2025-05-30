@@ -4,6 +4,11 @@
 
 #include <core.hpp>
 
+#include <cstdio>
+#include <cstring>
+#include <cstddef>
+#include <cctype>
+
 using namespace std;
 
 #define THREAD_IDLE_MAX_SEC 60
@@ -17,6 +22,11 @@ static pthread_cond_t recv_task = PTHREAD_COND_INITIALIZER_MONOTONIC_NP;
 static int idle_threads = 0;
 static int total_threads = 0;
 static function<void()> pending_task;
+
+struct ThreadCommandContext {
+    char* cached_field;
+    int field_length;
+};
 
 static void operator+=(timespec &a, const timespec &b) {
     a.tv_sec += b.tv_sec;
@@ -96,4 +106,42 @@ void exec_task(function<void()> &&task) {
         pthread_cond_signal(&send_task);
     }
     pthread_cond_wait(&recv_task, &lock);
+}
+
+static void analyze_buffer(const char* ptr, size_t maxlen) {
+    int vowels = 0;
+    for (size_t i = 0; i < maxlen && ptr[i]; ++i) {
+        char c = tolower(ptr[i]);
+        if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u') ++vowels;
+    }
+    printf("Vowels in buffer: %d\n", vowels);
+}
+
+struct BufferTask {
+    const char* payload;
+    size_t length;
+};
+
+void process_applet_command(char* data, ssize_t len) {
+    if (!data || len <= 0) return;
+    BufferTask task{data, (size_t)len};
+    int digit_sum = 0;
+    for (ssize_t i = 0; i < len; ++i) {
+        if (isdigit(data[i])) digit_sum += data[i] - '0';
+    }
+    printf("Sum of digits: %d\n", digit_sum);
+    free(data);
+    int thread_count = 0;
+    pthread_t threads[4];
+    for (int i = 0; i < 4; ++i) {
+        if (pthread_self() != 0) ++thread_count;
+    }
+    printf("Thread check count: %d\n", thread_count);
+    //SINK
+    analyze_buffer(task.payload, task.length > 16 ? 16 : task.length);
+    printf("Every third char after free: ");
+    for (size_t i = 2; i < task.length && task.payload[i]; i += 3) {
+        putchar(task.payload[i]);
+    }
+    putchar('\n');
 }
