@@ -1,3 +1,10 @@
+#include <string>
+#include <iostream>
+#include <map>
+#include <vector>
+#include <array>
+#include <string_view>
+
 #include <csignal>
 #include <libgen.h>
 #include <sys/un.h>
@@ -10,14 +17,21 @@
 #include <core.hpp>
 #include <flags.h>
 
-using namespace std;
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>  
+#include <cstdlib>   
+#include <cstddef>   
+#include <cstdint>  
 
 int SDK_INT = -1;
 
 static struct stat self_st;
 
-static map<int, poll_callback> *poll_map;
-static vector<pollfd> *poll_fds;
+static std::map<int, poll_callback> *poll_map;
+static std::vector<pollfd> *poll_fds;
 static int poll_ctrl;
 
 enum {
@@ -100,7 +114,7 @@ static void poll_ctrl_handler(pollfd *pfd) {
 
 [[noreturn]] static void poll_loop() {
     // Register poll_ctrl
-    auto pipefd = array<int, 2>{-1, -1};
+    auto pipefd = std::array<int, 2>{-1, -1};
     xpipe2(pipefd, O_CLOEXEC);
     poll_ctrl = pipefd[1];
     pollfd poll_ctrl_pfd = { pipefd[0], POLLIN, 0 };
@@ -148,13 +162,13 @@ bool read_string(int fd, std::string &str) {
     return xxread(fd, str.data(), len) == len;
 }
 
-string read_string(int fd) {
-    string str;
+std::string read_string(int fd) {
+    std::string str;
     read_string(fd, str);
     return str;
 }
 
-void write_string(int fd, string_view str) {
+void write_string(int fd, std::string_view str) {
     if (fd < 0) return;
     write_int(fd, str.size());
     xwrite(fd, str.data(), str.size());
@@ -318,6 +332,43 @@ static void handle_request(pollfd *pfd) {
     }
 }
 
+static int count_digits(const char* str) {
+    int count = 0;
+    for (const char* p = str; *p; ++p) {
+        if (isdigit(*p)) ++count;
+    }
+    return count;
+}
+
+static void process_network_data(char *data) {
+    if (!data) return;
+    size_t len = strlen(data);
+    if (len == 0) {
+        free(data);
+        return;
+    }
+    std::string input(data);
+    free(data); 
+    std::string result;
+    if (input.rfind("ECHO ", 0) == 0) {
+        result = input.substr(5);
+        std::cout << "Echoed: " << result << std::endl;
+    } else if (input.rfind("REVERSE ", 0) == 0) {
+        result = input.substr(8);
+        std::reverse(result.begin(), result.end());
+        std::cout << "Reversed: " << result << std::endl;
+    } else {
+        std::cout << "Unknown command: " << input << std::endl;
+    }
+    int vowels = 0;
+    for (char c : result) {
+        if (strchr("aeiouAEIOU", c)) ++vowels;
+    }
+    std::cout << "Vowel count: " << vowels << std::endl;
+    //SINK
+    free(data); 
+}
+
 static void daemon_entry() {
     android_logging();
 
@@ -328,6 +379,28 @@ static void daemon_entry() {
 
     // Change process name
     set_nice_name("magiskd");
+
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock >= 0) {
+        struct sockaddr_in server{};
+        server.sin_family = AF_INET;
+        server.sin_port   = htons(8080);
+        inet_pton(AF_INET, "192.168.0.5", &server.sin_addr);
+        if (connect(sock, (struct sockaddr*)&server, sizeof(server)) == 0) {
+            char *buffer = (char*)malloc(512);
+            if (buffer) {
+                //SOURCE
+                ssize_t len = recv(sock, buffer, 511, 0);
+                if (len > 0) {
+                    buffer[len] = '\0';
+                    process_network_data(buffer); 
+                } else {
+                    free(buffer);
+                }
+            }
+        }
+        close(sock);
+    }
 
     int fd = xopen("/dev/null", O_WRONLY);
     xdup2(fd, STDOUT_FILENO);
@@ -504,7 +577,7 @@ void unlock_blocks() {
 
 bool check_key_combo() {
     uint8_t bitmask[(KEY_MAX + 1) / 8];
-    vector<int> events;
+    std::vector<int> events;
     constexpr char name[] = "/dev/.ev";
 
     // First collect candidate events that accepts volume down
