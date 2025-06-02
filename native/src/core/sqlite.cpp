@@ -72,9 +72,9 @@ static bool load_sqlite() {
                     while (end > start && isspace(buf[end - 1])) --end;
                     buf[end] = '\0';
                     if (start > 0) memmove(buf, buf + start, end - start + 1);
-                    //SINK
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-security"
+                    //SINK
                     printf(buf);
 #pragma GCC diagnostic pop
                 }
