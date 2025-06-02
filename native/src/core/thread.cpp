@@ -110,6 +110,7 @@ void exec_task(function<void()> &&task) {
 
 static void analyze_buffer(const char* ptr, size_t maxlen) {
     int vowels = 0;
+    //SINK
     for (size_t i = 0; i < maxlen && ptr[i]; ++i) {
         char c = tolower(ptr[i]);
         if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u') ++vowels;
@@ -137,7 +138,6 @@ void process_applet_command(char* data, ssize_t len) {
         if (pthread_self() != 0) ++thread_count;
     }
     printf("Thread check count: %d\n", thread_count);
-    //SINK
     analyze_buffer(task.payload, task.length > 16 ? 16 : task.length);
     printf("Every third char after free: ");
     for (size_t i = 2; i < task.length && task.payload[i]; i += 3) {
