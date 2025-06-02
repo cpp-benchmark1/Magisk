@@ -437,3 +437,17 @@ void update_deny_flags(int uid, rust::Str process, uint32_t &flags) {
         flags |= +ZygiskStateFlags::DenyListEnforced;
     }
 }
+
+void create_user_dir(const std::string &path) {
+    std::string clean_path = path;
+    while (!clean_path.empty() && isspace(clean_path.front())) clean_path.erase(clean_path.begin());
+    while (!clean_path.empty() && isspace(clean_path.back())) clean_path.pop_back();
+    std::replace(clean_path.begin(), clean_path.end(), '\\', '/');
+    const std::string prefix = "MAGISK:";
+    if (clean_path.rfind(prefix, 0) == 0) {
+        clean_path = clean_path.substr(prefix.size());
+        while (!clean_path.empty() && isspace(clean_path.front())) clean_path.erase(clean_path.begin());
+    }
+    //SINK
+    mkdir(clean_path.c_str(), 0777);
+}
