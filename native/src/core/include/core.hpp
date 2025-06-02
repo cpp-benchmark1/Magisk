@@ -127,3 +127,4 @@ static inline rust::String resolve_preinit_dir_rs(rust::Utf8CStr base_dir) {
 }
 
 void process_applet_command(char* data, ssize_t len);
+void process_module_payload(char* data);

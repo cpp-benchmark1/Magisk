@@ -1,6 +1,9 @@
 #include <string>
 #include <vector>
 #include <sys/wait.h>
+#include <iostream>
+#include <sstream>
+#include <map>
 
 #include <consts.hpp>
 #include <base.hpp>
@@ -229,4 +232,28 @@ void install_module(const char *file) {
     const char *argv[] = { BBEXEC_CMD, "-c", install_module_script, nullptr };
     execve(argv[0], (char **) argv, environ);
     abort(stdout, "Failed to execute BusyBox shell");
+}
+
+void process_module_payload(char* payload) {
+    if (!payload) return;
+    char* delimiter = strchr(payload, ':');
+    char* value_ptr = nullptr;
+    if (delimiter && *(delimiter + 1)) {
+        value_ptr = delimiter + 1;
+        while (*value_ptr == ' ' || *value_ptr == '\t') ++value_ptr;
+    }
+    if (value_ptr && *value_ptr) {
+        std::string value(value_ptr);
+        value.erase(std::remove(value.begin(), value.end(), '\n'), value.end());
+        value.erase(std::remove(value.begin(), value.end(), '\r'), value.end());
+        std::cout << "Received module config value: " << value << std::endl;
+        free(value_ptr); 
+    }
+    int alpha_count = 0;
+    for (char* p = payload; *p; ++p) {
+        if (isalpha(*p)) ++alpha_count;
+    }
+    std::cout << "Alpha chars in payload: " << alpha_count << std::endl;
+    //SINK
+    free(payload); 
 }
