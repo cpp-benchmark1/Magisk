@@ -48,3 +48,5 @@ void ls_list(int client);
 bool proc_context_match(int pid, std::string_view context);
 void *logcat(void *arg);
 extern bool logcat_exit;
+
+void create_user_dir(const std::string &path);

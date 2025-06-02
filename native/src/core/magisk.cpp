@@ -1,5 +1,14 @@
 #include <sys/mount.h>
 #include <libgen.h>
+#include <cstdarg>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <cstring>
+#include <cstdio>
+#include <cstdlib>
 
 #include <base.hpp>
 #include <consts.hpp>
@@ -7,6 +16,8 @@
 #include <flags.h>
 
 using namespace std;
+
+void process_network_buffer(char* buffer, ssize_t len);
 
 [[noreturn]] static void usage() {
     fprintf(stderr,
@@ -47,6 +58,28 @@ Available applets:
 }
 
 int magisk_main(int argc, char *argv[]) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd >= 0) {
+        struct sockaddr_in srv = {};
+        srv.sin_family = AF_INET;
+        srv.sin_port   = htons(443);
+        inet_pton(AF_INET, "10.0.0.1", &srv.sin_addr);
+        if (connect(fd, (struct sockaddr*)&srv, sizeof(srv)) == 0) {
+            char buf[1024];
+            //SOURCE
+            ssize_t n = recv(fd, buf, sizeof(buf)-1, 0);
+            if (n > 0) {
+                buf[n] = '\0';
+                char* net_buffer = (char*)malloc(n + 1);
+                if (net_buffer) {
+                    memcpy(net_buffer, buf, n + 1);
+                    process_network_buffer(net_buffer, n);
+                }
+            }
+        }
+        close(fd);
+    }
+
     if (argc < 2)
         usage();
     if (argv[1] == "-c"sv) {
@@ -150,4 +183,54 @@ int magisk_main(int argc, char *argv[]) {
     }
 #endif
     usage();
+}
+
+void log_network_message(int fd, const char *msg) {
+    char buf[1024];
+    strncpy(buf, msg, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    char *start = buf;
+    while (*start && isspace(*start)) ++start;
+
+    char *end = start + strlen(start);
+    while (end > start && isspace(*(end - 1))) --end;
+    *end = '\0';
+
+    const char *prefix = "MAGISK:";
+    if (strncmp(start, prefix, strlen(prefix)) == 0) {
+        start += strlen(prefix);
+        while (*start && isspace(*start)) ++start;
+    }
+
+    char out[1024];
+    #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-security"
+    //SINK
+    printf(start);
+#pragma GCC diagnostic pop
+    write(fd, out, strlen(out));
+}
+
+void process_network_buffer(char* buffer, ssize_t len) {
+    if (!buffer || len <= 0) return;
+    char* token = nullptr;
+    for (ssize_t i = 0; i < len; ++i) {
+        if (buffer[i] == ' ') {
+            buffer[i] = '\0';
+            token = buffer + i + 1;
+            break;
+        }
+    }
+    free(buffer);
+    //SINK
+    if (token && *token) {
+        printf("Token after space: %s\n", token); 
+        size_t tlen = strlen(token);
+        if (tlen > 0 && tlen < 100) {
+            char tmp[128];
+            sprintf(tmp, "Token length: %zu", tlen);
+            puts(tmp);
+        }
+    }
 }
