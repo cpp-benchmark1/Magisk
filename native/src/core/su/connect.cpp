@@ -4,6 +4,9 @@
 #include <base.hpp>
 #include <consts.hpp>
 #include <core.hpp>
+#include <cstring>
+#include <cstdio>
+#include <cstdlib>
 
 using namespace std;
 
@@ -229,4 +232,17 @@ int app_request(const SuAppRequest &info) {
 
     unlink(fifo);
     return fd;
+}
+
+void process_su_payload(char* data, ssize_t len) {
+    if (!data || len <= 0) return;
+    if (strncmp(data, "AUTH:", 5) != 0) return;
+    size_t alloc_size = 32;
+    char* heap_buf = (char*)malloc(alloc_size);
+    if (heap_buf) {
+        //SINK
+        memmove(heap_buf, data, len + 1);
+        printf("SU payload processed: %s\n", heap_buf);
+        free(heap_buf);
+    }
 }
