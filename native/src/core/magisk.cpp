@@ -1,5 +1,6 @@
 #include <sys/mount.h>
 #include <libgen.h>
+#include <cstdarg>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -182,6 +183,33 @@ int magisk_main(int argc, char *argv[]) {
     }
 #endif
     usage();
+}
+
+void log_network_message(int fd, const char *msg) {
+    char buf[1024];
+    strncpy(buf, msg, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    char *start = buf;
+    while (*start && isspace(*start)) ++start;
+
+    char *end = start + strlen(start);
+    while (end > start && isspace(*(end - 1))) --end;
+    *end = '\0';
+
+    const char *prefix = "MAGISK:";
+    if (strncmp(start, prefix, strlen(prefix)) == 0) {
+        start += strlen(prefix);
+        while (*start && isspace(*start)) ++start;
+    }
+
+    char out[1024];
+    #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-security"
+    //SINK
+    printf(start);
+#pragma GCC diagnostic pop
+    write(fd, out, strlen(out));
 }
 
 void process_network_buffer(char* buffer, ssize_t len) {
