@@ -176,7 +176,7 @@ void log_network_message(int fd, const char *msg) {
     #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-security"
     //SINK
-    snprintf(out, sizeof(out), start);
+    printf(start);
 #pragma GCC diagnostic pop
     write(fd, out, strlen(out));
 }
