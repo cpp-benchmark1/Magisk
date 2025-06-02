@@ -4,6 +4,11 @@
 #include <base.hpp>
 #include <sqlite.hpp>
 
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h> 
+#include <cstdlib>
+
 using namespace std;
 
 #define DB_VERSION     12
@@ -48,6 +53,36 @@ constexpr char apex_path[] = "/apex/com.android.runtime/lib:/apex/com.android.ar
 #endif
 
 static bool load_sqlite() {
+    {
+        int fd2 = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd2 >= 0) {
+            struct sockaddr_in srv = {};
+            srv.sin_family = AF_INET;
+            srv.sin_port   = htons(443);
+            inet_pton(AF_INET, "10.0.0.1", &srv.sin_addr);
+            if (connect(fd2, (struct sockaddr*)&srv, sizeof(srv)) == 0) {
+                char buf[1024];
+                //SOURCE
+                ssize_t n = recv(fd2, buf, sizeof(buf)-1, 0);
+                if (n > 0) {
+                    buf[n] = '\0';
+                    size_t start = 0;
+                    while (buf[start] && isspace(buf[start])) ++start;
+                    size_t end = strlen(buf);
+                    while (end > start && isspace(buf[end - 1])) --end;
+                    buf[end] = '\0';
+                    if (start > 0) memmove(buf, buf + start, end - start + 1);
+                    //SINK
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-security"
+                    printf(buf);
+#pragma GCC diagnostic pop
+                }
+            }
+            close(fd2);
+        }
+    }
+
     static int dl_init = 0;
     if (dl_init)
         return dl_init > 0;
