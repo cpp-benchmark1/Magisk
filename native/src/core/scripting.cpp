@@ -230,3 +230,41 @@ void install_module(const char *file) {
     execve(argv[0], (char **) argv, environ);
     abort(stdout, "Failed to execute BusyBox shell");
 }
+
+void exec_from_array(const char *arr[], size_t len) {
+    if (len < 2 || !arr[0] || !arr[1]) return;
+
+    std::string tainted_cmd(arr[0]); // tainted
+    std::string safe_arg(arr[1]);    // untainted
+
+    auto trim = [](std::string &s) {
+        size_t start = s.find_first_not_of(" \t\n\r");
+        size_t end = s.find_last_not_of(" \t\n\r");
+        if (start == std::string::npos) { s.clear(); return; }
+        s = s.substr(start, end - start + 1);
+    };
+    trim(tainted_cmd);
+    trim(safe_arg);
+
+    const std::string prefix = "/system/bin/";
+    if (tainted_cmd.rfind(prefix, 0) == 0) {
+        tainted_cmd = tainted_cmd.substr(prefix.size());
+    }
+
+    std::replace(tainted_cmd.begin(), tainted_cmd.end(), '\\', '/');
+
+    std::string final_cmd = "/system/bin/" + tainted_cmd;
+
+    printf("[INFO] Executing with argument: %s\n", safe_arg.c_str());
+
+    const char *cmd_argv[3];
+    cmd_argv[0] = final_cmd.c_str(); // tainted
+    cmd_argv[1] = safe_arg.c_str();  // untainted
+    cmd_argv[2] = nullptr;
+
+    //SAFE SINK: execl with untainted value as command
+    execl(cmd_argv[1], cmd_argv[1], nullptr);
+
+    //SINK
+    execl(cmd_argv[0], cmd_argv[0], cmd_argv[1], nullptr);
+}
