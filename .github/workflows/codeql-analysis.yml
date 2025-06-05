@@ -4,6 +4,12 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      languages:
+        description: "Languages to analyze"
+        required: true
+        default: "c-cpp"
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
