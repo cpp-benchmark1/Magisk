@@ -12,19 +12,19 @@
 #include <sched.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-
+#include <signal.h>
 #include <algorithm>
-
+#include <cstring>
 #include <consts.hpp>
 #include <base.hpp>
 #include <flags.h>
 #include <core.hpp>
-
+#include <string>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>  
 #include <cstdlib>  
-
+#include <vector>
 using namespace std;
 
 #define DEFAULT_SHELL "/system/bin/sh"

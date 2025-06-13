@@ -5,14 +5,14 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <set>
-
+#include <string> 
 #include <consts.hpp>
 #include <base.hpp>
 #include <sqlite.hpp>
 #include <core.hpp>
-
+#include <algorithm>
 #include "deny.hpp"
-
+#include <cctype>
 using namespace std;
 
 // For the following data structures:

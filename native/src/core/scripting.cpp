@@ -4,11 +4,11 @@
 #include <iostream>
 #include <sstream>
 #include <map>
-
+#include <algorithm>
 #include <consts.hpp>
 #include <base.hpp>
 #include <core.hpp>
-
+#include <cctype>
 using namespace std;
 
 #define BBEXEC_CMD bbpath(), "sh"

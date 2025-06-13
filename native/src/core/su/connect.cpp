@@ -1,13 +1,13 @@
 #include <sys/types.h>
 #include <sys/wait.h>
-
+#include <string>
 #include <base.hpp>
 #include <consts.hpp>
 #include <core.hpp>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
-
+#include <unistd.h>
 using namespace std;
 
 #define CALL_PROVIDER \

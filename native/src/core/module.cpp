@@ -9,7 +9,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>    
 #include <cstring>    
-
+#include <cstdlib>
 #include <base.hpp>
 #include <consts.hpp>
 #include <core.hpp>

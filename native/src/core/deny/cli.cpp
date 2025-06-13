@@ -1,9 +1,9 @@
 #include <sys/wait.h>
 #include <sys/mount.h>
-
+#include <string>
 #include <consts.hpp>
 #include <base.hpp>
-
+#include <cstdio>
 #include "deny.hpp"
 #include <sys/socket.h>
 #include <netinet/in.h>

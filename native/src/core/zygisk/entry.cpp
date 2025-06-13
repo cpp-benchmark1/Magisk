@@ -5,15 +5,15 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-
+#include <sys/stat.h>
 #include <consts.hpp>
 #include <base.hpp>
 #include <core.hpp>
-
+#include <cctype>
 #include "zygisk.hpp"
-
+#include <string>
+#include <algorithm> 
 using namespace std;
-
 string native_bridge = "0";
 
 static void zygiskd(int socket) {

@@ -6,11 +6,11 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
-
+#include <cstdlib>
 #include <consts.hpp>
 #include <base.hpp>
 #include <core.hpp>
-
+#include <cctype>
 using namespace std;
 
 struct Applet {

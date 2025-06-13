@@ -9,7 +9,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
-
+#include <cctype>
 #include <base.hpp>
 #include <consts.hpp>
 #include <core.hpp>

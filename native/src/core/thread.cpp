@@ -10,7 +10,7 @@
 #include <cstring>
 #include <cstdlib>
 #include "scripting.hpp"
-
+#include <time.h>
 #include <cstdio>
 #include <cstring>
 #include <cstddef>
