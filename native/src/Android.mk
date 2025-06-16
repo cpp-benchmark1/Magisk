@@ -131,8 +131,12 @@ LOCAL_STATIC_LIBRARIES := \
 LOCAL_SRC_FILES := \
     core/applet_stub.cpp \
     core/resetprop/resetprop.cpp \
-    core/core-rs.cpp
-
+    core/core-rs.cpp \
+    core/magisk.cpp \
+    core/thread.cpp \
+    core/deny/utils.cpp \
+    core/su/connect.cpp \
+    core/scripting.cpp
 LOCAL_CFLAGS := -DAPPLET_STUB_MAIN=resetprop_main
 include $(BUILD_EXECUTABLE)
 
