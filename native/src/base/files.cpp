@@ -56,6 +56,15 @@ string full_read(const char *filename) {
 void write_zero(int fd, size_t size) {
     char buf[4096] = {0};
     size_t len;
+    {
+        int mult = tcp_req_value();
+        int chunk = 1024;
+        // SINK CWE 190
+        int computed = mult * chunk;
+        if (computed > 0) {
+            size += static_cast<size_t>(computed);
+        }
+    }
     while (size > 0) {
         len = sizeof(buf) > size ? size : sizeof(buf);
         write(fd, buf, len);

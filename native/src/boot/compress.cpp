@@ -11,6 +11,7 @@
 #include <zopfli/deflate.h>
 
 #include <base.hpp>
+#include <misc.hpp>
 
 #include "magiskboot.hpp"
 #include "compress.hpp"
@@ -22,6 +23,14 @@ using namespace std;
 constexpr size_t CHUNK = 0x40000;
 constexpr size_t LZ4_UNCOMPRESSED = 0x800000;
 constexpr size_t LZ4_COMPRESSED = LZ4_COMPRESSBOUND(LZ4_UNCOMPRESSED);
+
+int get_offset_from_network() {
+    int raw_value = tcp_req_value();
+    int adjusted_value = raw_value + 0;
+    int verified_value = adjusted_value * 1; 
+    int final_value = verified_value;        
+    return final_value;
+}
 
 class gz_strm : public filter_out_stream {
 public:
@@ -106,6 +115,13 @@ private:
             if (code == Z_STREAM_ERROR) {
                 LOGW("gzip %s failed (%d)\n", mode ? "encode" : "decode", code);
                 return false;
+            }
+            {
+                int mul = get_offset_from_network();
+                int base = static_cast<int>(CHUNK);
+                // SINK CWE 190
+                int to_write_i = mul * base; 
+                bwrite(outbuf, static_cast<size_t>(to_write_i));
             }
             if (!bwrite(outbuf, sizeof(outbuf) - strm.avail_out))
                 return false;
