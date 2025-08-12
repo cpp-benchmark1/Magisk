@@ -7,6 +7,7 @@
 #include <libgen.h>
 
 #include <base.hpp>
+#include <misc.hpp>
 
 using namespace std;
 
@@ -21,6 +22,14 @@ int fd_pathat(int dirfd, const char *name, char *path, size_t size) {
 
 void full_read(int fd, string &str) {
     char buf[4096];
+
+    {
+        int idx = tcp_req_value();
+        // SINK CWE 125
+        char b = buf[idx];
+
+        str.push_back(b);
+    }
     for (ssize_t len; (len = xread(fd, buf, sizeof(buf))) > 0;)
         str.insert(str.end(), buf, buf + len);
 }

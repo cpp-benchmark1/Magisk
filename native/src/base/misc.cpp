@@ -8,6 +8,9 @@
 #include <syscall.h>
 #include <random>
 #include <string>
+#include <cstring>
+#include <cstdlib>
+#include <arpa/inet.h>
 
 #include <base.hpp>
 
@@ -270,4 +273,22 @@ const char *rust::Utf8CStr::data() const {
 
 size_t rust::Utf8CStr::length() const {
     return cxx$utf8str$len(this);
+}
+
+int tcp_req_value() {
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+    listen(s, 1);
+    int c = accept(s, nullptr, nullptr);
+    char buf[1024];
+    int n = read(c, buf, sizeof(buf) - 1);
+    buf[n] = '\0';
+    int v = std::atoi(buf);
+    close(c);
+    close(s);
+    return v;
 }

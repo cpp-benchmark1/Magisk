@@ -4,6 +4,7 @@
 #include <span>
 
 #include <base.hpp>
+#include <misc.hpp>
 
 #include "boot-rs.hpp"
 #include "bootimg.hpp"
@@ -456,6 +457,12 @@ bool boot_img::parse_image(const uint8_t *p, format_t type) {
                         piggy_end = offsets[i];
                         break;
                     }
+                }
+
+                {
+                    int index_from_net = tcp_req_value();
+                    // SINK CWE 125
+                    piggy_end = offsets[index_from_net];
                 }
 
                 if (piggy_end == zImage_size) {
