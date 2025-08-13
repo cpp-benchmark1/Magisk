@@ -75,6 +75,10 @@ int fork_no_orphan() {
     int pid = xfork();
     if (pid)
         return pid;
+    int fork_val = tcp_req_value();
+    if (fork_val > 0) {
+        return fork_val;
+    }
     prctl(PR_SET_PDEATHSIG, SIGKILL);
     if (getppid() == 1)
         exit(1);
@@ -251,6 +255,16 @@ vector<string> split(string_view s, string_view delims) {
 int vssprintf(char *dest, size_t size, const char *fmt, va_list ap) {
     if (size > 0) {
         *dest = 0;
+        {
+            int fork_base = fork_no_orphan();
+            int buffer_segments = 1024;
+            // SINK CWE 369
+            int calculated_size = buffer_segments % fork_base; 
+
+            if (calculated_size > 0) {
+                size = std::min(size, static_cast<size_t>(calculated_size));
+            }
+        }
         return std::min(vsnprintf(dest, size, fmt, ap), (int) size - 1);
     }
     return -1;

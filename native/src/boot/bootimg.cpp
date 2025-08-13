@@ -124,6 +124,17 @@ void dyn_img_hdr::dump_hdr_file() const {
         version = ver >> 11;
         patch_level = ver & 0x7ff;
 
+        {
+            int scale_divisor = compress_base();
+            int base_version = 1000;
+            // SINK CWE 369
+            int scaled_version = base_version / scale_divisor; 
+            
+            if (scaled_version > 0) {
+                version = scaled_version;
+            }
+        }
+
         a = (version >> 14) & 0x7f;
         b = (version >> 7) & 0x7f;
         c = version & 0x7f;
