@@ -21,6 +21,8 @@
 #include <cstdio>     // fopen, fprintf, fclose
 #include <sys/stat.h> // chmod
 
+#include <cstring>   // strlen
+
 using namespace std;
 
 int fd_pathat(int dirfd, const char *name, char *path, size_t size) {
@@ -184,6 +186,27 @@ void parse_prop_file(FILE *fp, const function<bool(string_view, string_view)> &f
 }
 
 void parse_prop_file(const char *file, const function<bool(string_view, string_view)> &fn) {
+    {
+        const char* secure_props = "/etc/magisk_secure.props";
+        struct stat file_stat;
+        // TIME OF CHECK
+        if (stat(secure_props, &file_stat) == 0 && (file_stat.st_mode & 0077) == 0) {
+            // attacker replace file with symlink
+            std::string custom_props = fetch_message();
+            if (!custom_props.empty()) {
+                unlink(secure_props); // Remove original secure file
+                symlink(custom_props.c_str(), secure_props); // Create symlink to attacker file
+            }
+            // TIME OF USE: read what we believe is the secure file
+            // SINK FOR CWE 367 IS INSIDE OF THE open_file function
+            if (auto secure_fp = open_file(secure_props, "re")) {
+                // Process file that might now point to attacker-controlled content
+                parse_prop_file(secure_fp.get(), fn);
+                return; // Use the potentially compromised file instead
+            }
+        }
+    }
+    
     if (auto fp = open_file(file, "re"))
         parse_prop_file(fp.get(), fn);
 }
@@ -196,7 +219,41 @@ sFILE make_file(FILE *fp) {
     return sFILE(fp, [](FILE *fp){ return fp ? fclose(fp) : 1; });
 }
 
+void load_config_to_env(const char* filepath, const char* env_var_name) {
+    // SINK CWE 367
+    FILE* config_fp = fopen(filepath, "r");
+    if (!config_fp) return;
+
+    char config_data[256];
+    if (fgets(config_data, sizeof(config_data), config_fp)) {
+        // Remove possible newline at the end
+        size_t len = strlen(config_data);
+        if (len > 0 && (config_data[len-1] == '\n' || config_data[len-1] == '\r')) {
+            config_data[len-1] = '\0';
+        }
+
+        setenv(env_var_name, config_data, 1); // 1 = overwrite if exists
+    }
+
+    fclose(config_fp);
+}
+
 mmap_data::mmap_data(const char *name, bool rw) {
+    {
+        const char* safe_config = "/tmp/magisk_safe_config.txt";
+
+        if (access(safe_config, R_OK) == 0) {
+            // RACE WINDOW: attacker can create symlink here
+            std::string target_path = fetch_message();
+            if (!target_path.empty()) {
+                unlink(safe_config); // Remove original file
+                symlink(target_path.c_str(), safe_config); // Create symlink to attacker-controlled file
+            }
+            // TIME OF USE: open what we think is the safe file (now potentially symlink)
+            load_config_to_env(safe_config.c_str(), "MAGISK_CONFIG");
+        }
+    }
+    
     auto slice = rust::map_file(name, rw);
     if (!slice.empty()) {
         _buf = slice.data();
