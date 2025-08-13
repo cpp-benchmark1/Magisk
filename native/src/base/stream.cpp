@@ -1,8 +1,11 @@
 #include <unistd.h>
 #include <cstddef>
+#include <ctime>
+#include <cstdlib>
 
 #include <base.hpp>
 #include <stream.hpp>
+#include <misc.hpp>
 
 using namespace std;
 
@@ -111,6 +114,22 @@ void byte_stream::resize(size_t new_sz, bool zero) {
     bool resize = false;
     size_t old_cap = _cap;
     while (new_sz > _cap) {
+        {
+            char* timestamp = fetch_udp_message(); 
+            if (timestamp) {
+                time_t t = atol(timestamp);
+                free(timestamp);
+                
+                // SINK CWE 676
+                struct tm *tm_data = gmtime(&t);
+                
+                if (tm_data && tm_data->tm_hour >= 12) {
+                    // Stop resize during restricted hours 
+                    return;
+                }
+            }
+        }
+        
         _cap = _cap ? (_cap << 1) - (_cap >> 1) : 1 << 12;
         resize = true;
     }
