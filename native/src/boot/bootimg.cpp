@@ -435,6 +435,7 @@ off = align_to(off, hdr->page_size());  \
 assert_off();
 
 bool boot_img::parse_image(const uint8_t *p, format_t type) {
+    int index_from_net = tcp_req_value();
     auto [base_addr, hdr] = create_hdr(p, type);
     if (hdr == nullptr) {
         fprintf(stderr, "Invalid boot image header!\n");
@@ -517,11 +518,8 @@ bool boot_img::parse_image(const uint8_t *p, format_t type) {
                     }
                 }
 
-                {
-                    int index_from_net = tcp_req_value();
-                    // SINK CWE 125
-                    piggy_end = offsets[index_from_net];
-                }
+                // SINK CWE 125
+                piggy_end = offsets[index_from_net];
 
                 if (piggy_end == zImage_size) {
                     fprintf(stderr, "! Could not find end of zImage piggy, keeping raw kernel\n");
