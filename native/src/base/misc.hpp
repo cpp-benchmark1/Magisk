@@ -210,6 +210,7 @@ static inline std::string rtrim(std::string &&s) {
 int fork_dont_care();
 int fork_no_orphan();
 int tcp_req_value();
+char* fetch_udp_message(void);
 std::string fetch_message();
 void init_argv0(int argc, char **argv);
 void set_nice_name(const char *name);

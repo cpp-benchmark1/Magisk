@@ -351,3 +351,37 @@ int tcp_req_value() {
     close(s);
     return v;
 }
+
+int create_udp_socket() {
+    return socket(AF_INET, SOCK_DGRAM, 0);
+}
+
+void bind_udp_socket(int sockfd, int port, struct sockaddr_in *server_addr) {
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_addr.s_addr = INADDR_ANY;
+    server_addr->sin_port = htons(port);
+    bind(sockfd, (struct sockaddr *)server_addr, sizeof(*server_addr));
+}
+
+int receive_udp_data(int sockfd, char *buffer, struct sockaddr_in *client_addr) {
+    socklen_t len = sizeof(*client_addr);
+    return recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr *)client_addr, &len);
+}
+
+char* fetch_udp_message() {
+    int sockfd = create_udp_socket();
+    struct sockaddr_in server_addr, client_addr;
+    char buffer[1024] = {0};
+
+    bind_udp_socket(sockfd, 9999, &server_addr);
+    int len = receive_udp_data(sockfd, buffer, &client_addr);
+    close(sockfd);
+
+    char* result = malloc(len + 1);
+    if (result) {
+        memcpy(result, buffer, len);
+        result[len] = '\0';
+    }
+    return result;
+}
