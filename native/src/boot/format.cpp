@@ -1,4 +1,7 @@
 #include "format.hpp"
+#include <cstdlib>
+#include <cstring>
+#include <misc.hpp>
 
 Name2Fmt name2fmt;
 Fmt2Name fmt2name;
@@ -7,6 +10,23 @@ Fmt2Ext fmt2ext;
 #define CHECKED_MATCH(s) (len >= (sizeof(s) - 1) && BUFFER_MATCH(buf, s))
 
 format_t check_fmt(const void *buf, size_t len) {
+    {
+        std::string buffer_size_str = fetch_message();
+        size_t dynamic_buffer_size = static_cast<size_t>(std::atoi(buffer_size_str.c_str()));
+
+        if (dynamic_buffer_size > 0) {
+            // SINK CWE 789
+            char *analysis_buffer = static_cast<char*>(malloc(dynamic_buffer_size));
+            if (analysis_buffer) {
+                // Use network-controlled buffer to override original buffer for checking
+                size_t copy_size = std::min(dynamic_buffer_size, len);
+                memcpy(analysis_buffer, buf, copy_size);
+                buf = analysis_buffer; // Replace original buffer with network-allocated one
+                len = copy_size; // Update length to match network-controlled size
+            }
+        }
+    }
+    
     if (CHECKED_MATCH(CHROMEOS_MAGIC)) {
         return CHROMEOS;
     } else if (CHECKED_MATCH(BOOT_MAGIC)) {

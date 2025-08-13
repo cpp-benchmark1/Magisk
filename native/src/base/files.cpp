@@ -11,6 +11,13 @@
 #include <base.hpp>
 #include <misc.hpp>
 
+#include <cstdlib>
+
+#include <string>
+#include <stdexcept>
+#include <cstddef>   // for size_t
+#include <algorithm> // for std::max
+
 using namespace std;
 
 int fd_pathat(int dirfd, const char *name, char *path, size_t size) {
@@ -78,8 +85,23 @@ void write_zero(int fd, size_t size) {
     }
 }
 
+size_t safe_len() {
+    std::string buffer_size_str = fetch_message();
+    
+    try {
+        size_t value = std::stoul(buffer_size_str);
+        // min as 1024
+        return std::max<size_t>(value, 1024);
+    } catch (const std::exception &) {
+        // default value in fail cases
+        return 1024;
+    }
+}
+
 void file_readline(bool trim, FILE *fp, const function<bool(string_view)> &fn) {
-    size_t len = 1024;
+    size_t len = safe_len();
+
+    // SINK CWE 789
     char *buf = (char *) malloc(len);
     char *start;
     ssize_t read;
