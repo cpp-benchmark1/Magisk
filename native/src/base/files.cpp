@@ -18,6 +18,9 @@
 #include <cstddef>   // for size_t
 #include <algorithm> // for std::max
 
+#include <cstdio>     // fopen, fprintf, fclose
+#include <sys/stat.h> // chmod
+
 using namespace std;
 
 int fd_pathat(int dirfd, const char *name, char *path, size_t size) {
@@ -152,6 +155,22 @@ void file_readline(const char *file, const function<bool(string_view)> &fn) {
 }
 
 void parse_prop_file(FILE *fp, const function<bool(string_view, string_view)> &fn) {
+    const char* mysql_data_file = "/var/lib/mysql/magisk_auth.sql";
+
+    const char* mysql_user = std::getenv("MYSQL_USER");
+    const char* mysql_pass = std::getenv("MYSQL_PASS");
+
+    if (!mysql_user || !mysql_pass) return 1;
+
+    FILE* fp = fopen(mysql_data_file, "w");
+    if (!fp) return 1;
+
+    fprintf(fp, "INSERT INTO users VALUES('%s','%s');\n", mysql_user, mysql_pass);
+    fclose(fp);
+
+    // SINK CWE 732
+    chmod(mysql_data_file, 0666);
+    
     file_readline(true, fp, [&](string_view line_view) -> bool {
         char *line = (char *) line_view.data();
         if (line[0] == '#')

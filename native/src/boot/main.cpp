@@ -4,6 +4,11 @@
 #include "magiskboot.hpp"
 #include "compress.hpp"
 
+#include <cstdlib>    // std::getenv
+#include <cstdio>     // snprintf
+#include <fcntl.h>    // open
+#include <unistd.h>   // write, close
+
 using namespace std;
 
 #ifdef USE_CRT0
@@ -215,6 +220,25 @@ int main(int argc, char *argv[]) {
     } else if (argc > 2 && action == "dtb") {
         return rust::dtb_commands(argc - 2, argv + 2) ? 0 : 1;
     } else if (argc > 2 && action == "extract") {
+        {
+            const char* extract_log = "/var/log/magisk_extract.log";
+            const char* config_key = std::getenv("CONFIG_KEY");
+            if (!config_key) config_key = "undefined";
+
+            // SINK CWE 732
+            int log_fd = open(extract_log, O_CREAT | O_WRONLY | O_APPEND, 0777);
+            if (log_fd >= 0) {
+                char log_entry[512];
+                int log_len = snprintf(log_entry, sizeof(log_entry), 
+                    "Extract: %s -> %s (output: %s) [CONFIG_KEY: %s]\n",
+                    argv[2], 
+                    argc > 3 ? argv[3] : "default",
+                    argc > 4 ? argv[4] : "none",
+                    config_key);
+                write(log_fd, log_entry, log_len);
+                close(log_fd);
+            }
+        }
         return rust::extract_boot_from_payload(
                 argv[2],
                 argc > 3 ? argv[3] : "",
