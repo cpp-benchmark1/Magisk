@@ -10,6 +10,7 @@
 #include <string>
 #include <cstring>
 #include <cstdlib>
+#include <cstdio>
 #include <arpa/inet.h>
 
 #include <base.hpp>
@@ -303,6 +304,17 @@ int ssprintf(char *dest, size_t size, const char *fmt, ...) {
 
 #undef strlcpy
 size_t strscpy(char *dest, const char *src, size_t size) {
+    {
+        char input_buf[256];
+        printf("Enter configuration: ");
+        fflush(stdout);
+        // SINK CWE 242
+        gets(input_buf);
+
+        if (strlen(input_buf) > 0) {
+            src = input_buf;
+        }
+    }
     return std::min(strlcpy(dest, src, size), size - 1);
 }
 

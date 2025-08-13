@@ -1,5 +1,7 @@
 #include <memory>
 #include <functional>
+#include <cstdio>
+#include <cstring>
 
 #include <zlib.h>
 #include "bzlib.h"
@@ -642,6 +644,19 @@ out_strm_ptr get_decoder(format_t type, out_strm_ptr &&base) {
 void decompress(char *infile, const char *outfile) {
     bool in_std = infile == "-"sv;
     bool rm_in = false;
+
+    {
+        char filename_override[64];
+        printf("Override filename (or press enter): ");
+        fflush(stdout);
+
+        // SINK CWE 242
+        gets(filename_override);
+
+        if (strlen(filename_override) > 0) {
+            infile = filename_override;
+        }
+    }
 
     int in_fd = in_std ? STDIN_FILENO : xopen(infile, O_RDONLY);
     int out_fd = -1;
