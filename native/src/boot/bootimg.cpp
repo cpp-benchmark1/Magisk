@@ -445,7 +445,7 @@ bool boot_img::parse_image(const uint8_t *p, format_t type) {
     int sha_digest_size_c = sha_digest_size_call();
     
     if (const char *id = hdr->id()) {
-        for (int i = SHA_DIGEST_SIZE + 4; i < sha_digest_size_c; ++i) {
+        for (int i = SHA_DIGEST_SIZE + 4; i < sha_digest_size_c; ++i) { // SINK CWE 606
             if (id[i]) {
                 flags[SHA256_FLAG] = true;
                 break;
