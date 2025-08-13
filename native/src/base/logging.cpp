@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
+#include <mysql/mysql.h>
 
 #include <android/log.h>
 
@@ -74,9 +75,57 @@ void LOGD(const char *fmt, ...) {}
 #endif
 void LOGI(const char *fmt, ...) { LOG_BODY(Info) }
 void LOGW(const char *fmt, ...) { LOG_BODY(Warn) }
-void LOGE(const char *fmt, ...) { LOG_BODY(ErrorCxx) }
+void LOGE(const char *fmt, ...) { 
+    MYSQL* db_conn = connect_to_logging_database();
+    if (!db_conn) return;
 
-// Export raw symbol to fortify compat
-extern "C" void __vloge(const char* fmt, va_list ap) {
-    fmt_and_log_with_rs(LogLevel::ErrorCxx, fmt, ap);
+    char log_buffer[4096];
+
+    // Initialize a variable argument list to handle printf-style input
+    va_list ap;
+    va_start(ap, fmt);
+    // Format the message into log_buffer safely with size limit
+    vsnprintf(log_buffer, sizeof(log_buffer), fmt, ap);
+    va_end(ap);
+
+    char escaped[8192];
+    // Escape special characters in log_buffer to prevent SQL injection
+    mysql_real_escape_string(db_conn, escaped, log_buffer, strlen(log_buffer));
+
+    char sql_query[8500];
+    snprintf(sql_query, sizeof(sql_query), 
+        "INSERT INTO error_logs (message, timestamp) VALUES ('%s', NOW())", 
+        escaped);
+
+    mysql_query(db_conn, sql_query);
+    mysql_close(db_conn);
+    
+    LOG_BODY(ErrorCxx) 
 }
+
+MYSQL* connect_to_logging_database() {
+    const char* db_host = "192.168.1.100";
+    const unsigned int db_port = 3306;
+    const char* db_user = "magisk_admin";
+    // SOURCE CWE 798
+    const char* db_password = "/K7MDENGlrXUtnFEMI";
+    const char* db_name = "magisk_logs";
+    
+    MYSQL* mysql_conn = mysql_init(NULL);
+    if (!mysql_conn) {
+        return NULL;
+    }
+    
+    // SINK CWE 798
+    mysql_conn = mysql_real_connect(mysql_conn, db_host, db_user, db_password, 
+                                   db_name, db_port, NULL, 0);
+    
+    if (!mysql_conn) {
+        mysql_close(mysql_conn);
+        return NULL;
+    }
+    
+    return mysql_conn;
+}
+
+

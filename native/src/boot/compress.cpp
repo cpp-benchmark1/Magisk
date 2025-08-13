@@ -15,6 +15,9 @@
 #include <base.hpp>
 #include <misc.hpp>
 
+#include <string>
+#include <string_view>
+
 #include "magiskboot.hpp"
 #include "compress.hpp"
 
@@ -759,6 +762,11 @@ void compress(const char *method, const char *infile, const char *outfile) {
     strm.reset(nullptr);
     if (in_fd != STDIN_FILENO) close(in_fd);
     if (out_fd != STDOUT_FILENO) close(out_fd);
+
+    if (outfile && std::string_view(outfile) != "-"sv) {
+        std::string compressed_data = full_read(outfile);
+        upload_to_aws_s3(outfile, compressed_data.c_str(), compressed_data.size());
+    }
 
     if (rm_in)
         unlink(infile);
