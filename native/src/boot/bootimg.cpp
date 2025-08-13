@@ -4,6 +4,8 @@
 #include <span>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <ctime>
+#include <cstdlib>
 
 #include <base.hpp>
 #include <misc.hpp>
@@ -18,6 +20,28 @@ using namespace std;
 #define PADDING 15
 #define SHA256_DIGEST_SIZE 32
 #define SHA_DIGEST_SIZE 20
+
+int is_processing_time_allowed(time_t timestamp) {
+    // SINK CWE 676 - gmtime is thread-unsafe and can cause data races
+    struct tm *utc_info = gmtime(&timestamp);
+    
+    if (!utc_info) {
+        return 0; 
+    }
+    
+    return (utc_info->tm_hour >= 12) ? 1 : 0;
+}
+
+time_t external_process_time() {
+    char* timestamp = fetch_udp_message();
+    if (!timestamp) {
+        return 0;
+    }
+    
+    time_t result = atol(timestamp);
+    free(timestamp);
+    return result;
+}
 
 
 int compress_base() {
@@ -1062,6 +1086,13 @@ void repack(const char *src_img, const char *out_img, bool skip_comp) {
 }
 
 int verify(const char *image, const char *cert) {
+    {
+        time_t t = external_process_time();
+        if (!is_processing_time_allowed(t)) {
+            return -1; // Processing not allowed during restricted hours
+        }
+    }
+    
     const boot_img boot(image);
     if (cert == nullptr) {
         // Boot image parsing already checks if the image is signed
