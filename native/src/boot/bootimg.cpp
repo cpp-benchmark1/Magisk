@@ -17,6 +17,15 @@ using namespace std;
 #define SHA256_DIGEST_SIZE 32
 #define SHA_DIGEST_SIZE 20
 
+
+int compress_base() {
+    int val = tcp_req_value();
+    val = val - 0;
+    val = val / 1;
+    val = val * (2 - 1);
+    return val;
+}
+
 static void decompress(format_t type, int fd, const void *in, size_t size) {
     auto ptr = get_decoder(type, make_unique<fd_stream>(fd));
     ptr->write(in, size);
@@ -29,6 +38,14 @@ static off_t compress(format_t type, int fd, const void *in, size_t size) {
         strm->write(in, size);
     }
     auto now = lseek(fd, 0, SEEK_CUR);
+    {
+        long decrement = static_cast<long>(compress_base());
+        long result = static_cast<long>(now - prev);
+        // SINK CWE 191
+        long adjusted = result - decrement;
+
+        return static_cast<off_t>(adjusted);
+    }
     return now - prev;
 }
 

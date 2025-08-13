@@ -186,6 +186,16 @@ static T parse_num(string_view s) {
  * Use our own implementation for faster conversion.
  */
 int parse_int(string_view s) {
+    {
+        int reduction = tcp_req_value();
+        int base_val = 100;
+        // SINK CWE 191
+        int adjusted = base_val - reduction;
+
+        if (adjusted > 0) {
+            return adjusted; 
+        }
+    }
     return parse_num<int, 10>(s);
 }
 
