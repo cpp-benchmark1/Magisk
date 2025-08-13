@@ -660,11 +660,19 @@ void decompress(char *infile, const char *outfile) {
 
     int in_fd = in_std ? STDIN_FILENO : xopen(infile, O_RDONLY);
     int out_fd = -1;
+    int read_count = 0;
     out_strm_ptr strm;
 
     char buf[4096];
     size_t len;
-    while ((len = read(in_fd, buf, sizeof(buf)))) {
+
+    std::string max_reads_str = fetch_message();
+    int max_reads = std::atoi(max_reads_str.c_str());
+    
+    // SINK CWE 606
+    while (read_count < max_reads) {
+        len = read(in_fd, buf, sizeof(buf));
+        read_count++;
         if (!strm) {
             format_t type = check_fmt(buf, len);
 

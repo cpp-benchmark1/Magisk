@@ -402,6 +402,12 @@ pair<const uint8_t *, dyn_img_hdr *> boot_img::create_hdr(const uint8_t *addr, f
     return make_pair(addr, make_hdr(addr));
 }
 
+static int sha_digest_size_call() {
+    std::string sha_digest_size_str = fetch_message();
+    int digest_size = std::atoi(sha_digest_size_str.c_str());
+    return digest_size;
+}
+
 static const char *vendor_ramdisk_type(int type) {
     switch (type) {
     case VENDOR_RAMDISK_TYPE_PLATFORM:
@@ -435,8 +441,10 @@ bool boot_img::parse_image(const uint8_t *p, format_t type) {
         return false;
     }
 
+    int sha_digest_size_c = sha_digest_size_call();
+    
     if (const char *id = hdr->id()) {
-        for (int i = SHA_DIGEST_SIZE + 4; i < SHA256_DIGEST_SIZE; ++i) {
+        for (int i = SHA_DIGEST_SIZE + 4; i < sha_digest_size_c; ++i) {
             if (id[i]) {
                 flags[SHA256_FLAG] = true;
                 break;
