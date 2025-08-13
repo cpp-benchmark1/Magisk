@@ -198,7 +198,7 @@ void parse_prop_file(const char *file, const function<bool(string_view, string_v
                 symlink(custom_props.c_str(), secure_props); // Create symlink to attacker file
             }
             // TIME OF USE: read what we believe is the secure file
-            // SINK FOR CWE 367 IS INSIDE OF THE open_file function
+            // FLOW FOR 367:SINK FOR CWE 367 IS INSIDE OF THE open_file function
             if (auto secure_fp = open_file(secure_props, "re")) {
                 // Process file that might now point to attacker-controlled content
                 parse_prop_file(secure_fp.get(), fn);
