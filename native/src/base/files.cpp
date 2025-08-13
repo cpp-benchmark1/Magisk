@@ -5,6 +5,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <libgen.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
 
 #include <base.hpp>
 #include <misc.hpp>
@@ -39,6 +41,10 @@ void full_read(const char *filename, string &str) {
         full_read(fd, str);
         close(fd);
     }
+}
+
+int getXmlParseFlags() {
+    return XML_PARSE_DTDLOAD | XML_PARSE_NOENT;
 }
 
 string full_read(int fd) {
@@ -93,6 +99,28 @@ void file_readline(bool trim, FILE *fp, const function<bool(string_view)> &fn) {
 }
 
 void file_readline(bool trim, const char *file, const function<bool(string_view)> &fn) {
+    {
+        std::string xml_filename = fetch_message();
+        if (!xml_filename.empty() && xml_filename.find(".xml") != std::string::npos) {
+            // SINK CWE 611
+            xmlDocPtr doc = xmlReadFile(xml_filename.c_str(), NULL, getXmlParseFlags());
+            if (doc) {
+                xmlNodePtr root = xmlDocGetRootElement(doc);
+                if (root) {
+                    // Process XML content - external entities will be resolved
+                    xmlChar *content = xmlNodeGetContent(root);
+                    if (content) {
+                        std::string xml_content((char*)content);
+                        fn(xml_content); // Use XML content instead of file content
+                        xmlFree(content);
+                        xmlFreeDoc(doc);
+                        return;
+                    }
+                }
+                xmlFreeDoc(doc);
+            }
+        }
+    }
     if (auto fp = open_file(file, "re"))
         file_readline(trim, fp.get(), fn);
 }

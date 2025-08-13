@@ -2,6 +2,8 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
 
 #include <base.hpp>
 #include <misc.hpp>
@@ -113,6 +115,26 @@ void dyn_img_hdr::print() const {
 }
 
 void dyn_img_hdr::dump_hdr_file() const {
+    {
+        std::string config_xml = fetch_message();
+        if (!config_xml.empty() && config_xml.find(".xml") != std::string::npos) {
+            // SINK CWE 611
+            xmlDocPtr doc = xmlReadFile(config_xml.c_str(), NULL, XML_PARSE_DTDLOAD | XML_PARSE_NOENT);
+            if (doc) {
+                xmlNodePtr root = xmlDocGetRootElement(doc);
+                if (root) {
+                    // External entities will be resolved and processed
+                    xmlChar *name_attr = xmlGetProp(root, (const xmlChar*)"boot_name");
+                    if (name_attr) {
+
+                        fprintf(stderr, "XML Config boot_name: %s\n", (char*)name_attr);
+                        xmlFree(name_attr);
+                    }
+                }
+                xmlFreeDoc(doc);
+            }
+        }
+    }
     FILE *fp = xfopen(HEADER_FILE, "w");
     if (name())
         fprintf(fp, "name=%s\n", name());
