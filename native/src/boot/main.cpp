@@ -229,7 +229,7 @@ int main(int argc, char *argv[]) {
             int log_fd = open(extract_log, O_CREAT | O_WRONLY | O_APPEND, 0777);
             if (log_fd >= 0) {
                 char log_entry[512];
-                int log_len = snprintf(log_entry, sizeof(log_entry), 
+                int log_len = ssprintf(log_entry, sizeof(log_entry), 
                     "Extract: %s -> %s (output: %s) [CONFIG_KEY: %s]\n",
                     argv[2], 
                     argc > 3 ? argv[3] : "default",

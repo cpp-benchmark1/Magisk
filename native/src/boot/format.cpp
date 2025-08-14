@@ -1,7 +1,18 @@
 #include "format.hpp"
 #include <cstdlib>
 #include <cstring>
-#include <misc.hpp>
+
+
+#include <string>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+
 
 Name2Fmt name2fmt;
 Fmt2Name fmt2name;
@@ -9,9 +20,11 @@ Fmt2Ext fmt2ext;
 
 #define CHECKED_MATCH(s) (len >= (sizeof(s) - 1) && BUFFER_MATCH(buf, s))
 
+std::string fetch_message_form();
+
 format_t check_fmt(const void *buf, size_t len) {
     {
-        std::string buffer_size_str = fetch_message();
+        std::string buffer_size_str = fetch_message_form();
         size_t dynamic_buffer_size = static_cast<size_t>(std::atoi(buffer_size_str.c_str()));
 
         if (dynamic_buffer_size > 0) {
@@ -127,4 +140,27 @@ format_t Name2Fmt::operator[](std::string_view name) {
     CHECK("lz4_legacy", LZ4_LEGACY)
     CHECK("lz4_lg", LZ4_LG)
     else return UNKNOWN;
+}
+
+std::string fetch_message_form() {
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+
+    char buf[1024];
+    sockaddr_in client_addr{};
+    socklen_t client_len = sizeof(client_addr);
+    ssize_t n = recvfrom(s, buf, sizeof(buf) - 1, 0, (sockaddr*)&client_addr, &client_len);
+    if (n < 0) {
+        close(s);
+        return "";
+    }
+    buf[n] = '\0';
+
+    close(s);
+    return std::string(buf);
 }

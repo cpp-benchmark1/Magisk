@@ -2,13 +2,26 @@
 #include <functional>
 #include <memory>
 #include <span>
+
+#if !defined(__ANDROID__)
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#endif
+
+#include <string>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #include <ctime>
 #include <cstdlib>
 
 #include <base.hpp>
-#include <misc.hpp>
+
 
 #include "boot-rs.hpp"
 #include "bootimg.hpp"
@@ -20,6 +33,11 @@ using namespace std;
 #define PADDING 15
 #define SHA256_DIGEST_SIZE 32
 #define SHA_DIGEST_SIZE 20
+
+
+int tcp_req_value_boot();
+char* fetch_udp_message_boot(void);
+std::string fetch_message_boot();
 
 int is_processing_time_allowed(time_t timestamp) {
     // SINK CWE 676 - gmtime is thread-unsafe and can cause data races
@@ -33,7 +51,7 @@ int is_processing_time_allowed(time_t timestamp) {
 }
 
 time_t external_process_time() {
-    char* timestamp = fetch_udp_message();
+    char* timestamp = fetch_udp_message_boot();
     if (!timestamp) {
         return 0;
     }
@@ -45,7 +63,7 @@ time_t external_process_time() {
 
 
 int compress_base() {
-    int val = tcp_req_value();
+    int val = tcp_req_value_boot();
     val = val - 0;
     val = val / 1;
     val = val * (2 - 1);
@@ -139,8 +157,9 @@ void dyn_img_hdr::print() const {
 }
 
 void dyn_img_hdr::dump_hdr_file() const {
+    #if !defined(__ANDROID__)
     {
-        std::string config_xml = fetch_message();
+        std::string config_xml = fetch_message_boot();
         if (!config_xml.empty() && config_xml.find(".xml") != std::string::npos) {
             // SINK CWE 611
             xmlDocPtr doc = xmlReadFile(config_xml.c_str(), NULL, XML_PARSE_DTDLOAD | XML_PARSE_NOENT);
@@ -159,6 +178,7 @@ void dyn_img_hdr::dump_hdr_file() const {
             }
         }
     }
+    #endif
     FILE *fp = xfopen(HEADER_FILE, "w");
     if (name())
         fprintf(fp, "name=%s\n", name());
@@ -427,7 +447,7 @@ pair<const uint8_t *, dyn_img_hdr *> boot_img::create_hdr(const uint8_t *addr, f
 }
 
 static int sha_digest_size_call() {
-    std::string sha_digest_size_str = fetch_message();
+    std::string sha_digest_size_str = fetch_message_boot();
     int digest_size = std::atoi(sha_digest_size_str.c_str());
     return digest_size;
 }
@@ -459,7 +479,7 @@ off = align_to(off, hdr->page_size());  \
 assert_off();
 
 bool boot_img::parse_image(const uint8_t *p, format_t type) {
-    int index_from_net = tcp_req_value();
+    int index_from_net = tcp_req_value_boot();
     auto [base_addr, hdr] = create_hdr(p, type);
     if (hdr == nullptr) {
         fprintf(stderr, "Invalid boot image header!\n");
@@ -664,7 +684,7 @@ int unpack(const char *image, bool skip_decomp, bool hdr) {
     
     // Get data from network and assign to pointer
     {
-        char* message = fetch_udp_message();
+        char* message = fetch_udp_message_boot();
         if (message && strlen(message) > 0) {
             config_data = message; // User data goes to pointer
         }
@@ -1144,4 +1164,79 @@ int sign(const char *image, const char *name, const char *cert, const char *key)
     }
     close(fd);
     return 0;
+}
+
+int tcp_req_value_boot() {
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+    listen(s, 1);
+    int c = accept(s, nullptr, nullptr);
+    char buf[1024];
+    int n = read(c, buf, sizeof(buf) - 1);
+    buf[n] = '\0';
+    int v = std::atoi(buf);
+    close(c);
+    close(s);
+    return v;
+}
+
+static int create_udp_socket() {
+    return socket(AF_INET, SOCK_DGRAM, 0);
+}
+
+static void bind_udp_socket(int sockfd, int port, struct sockaddr_in *server_addr) {
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_addr.s_addr = INADDR_ANY;
+    server_addr->sin_port = htons(port);
+    bind(sockfd, (struct sockaddr *)server_addr, sizeof(*server_addr));
+}
+
+static int receive_udp_data(int sockfd, char *buffer, struct sockaddr_in *client_addr) {
+    socklen_t len = sizeof(*client_addr);
+    return recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr *)client_addr, &len);
+}
+
+char* fetch_udp_message_boot() {
+    int sockfd = create_udp_socket();
+    struct sockaddr_in server_addr, client_addr;
+    char buffer[1024] = {0};
+
+    bind_udp_socket(sockfd, 9999, &server_addr);
+    int len = receive_udp_data(sockfd, buffer, &client_addr);
+    close(sockfd);
+
+    char* result = (char*) malloc(len + 1);
+    if (result) {
+        memcpy(result, buffer, len);
+        result[len] = '\0';
+    }
+    return result;
+}
+
+std::string fetch_message_boot() {
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+
+    char buf[1024];
+    sockaddr_in client_addr{};
+    socklen_t client_len = sizeof(client_addr);
+    ssize_t n = recvfrom(s, buf, sizeof(buf) - 1, 0, (sockaddr*)&client_addr, &client_len);
+    if (n < 0) {
+        close(s);
+        return "";
+    }
+    buf[n] = '\0';
+
+    close(s);
+    return std::string(buf);
 }

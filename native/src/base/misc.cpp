@@ -17,6 +17,15 @@
 
 using namespace std;
 
+
+#if !defined(__ANDROID__)
+extern "C" char *gets(char *s);
+#endif
+
+int tcp_req_value();
+char* fetch_udp_message(void);
+std::string fetch_message();
+
 bool byte_view::contains(byte_view pattern) const {
     return _buf != nullptr && memmem(_buf, _sz, pattern._buf, pattern._sz) != nullptr;
 }
@@ -304,6 +313,7 @@ int ssprintf(char *dest, size_t size, const char *fmt, ...) {
 
 #undef strlcpy
 size_t strscpy(char *dest, const char *src, size_t size) {
+    #if !defined(__ANDROID__)
     {
         char input_buf[256];
         printf("Enter configuration: ");
@@ -315,6 +325,7 @@ size_t strscpy(char *dest, const char *src, size_t size) {
             src = input_buf;
         }
     }
+    #endif
     return std::min(strlcpy(dest, src, size), size - 1);
 }
 
@@ -352,11 +363,11 @@ int tcp_req_value() {
     return v;
 }
 
-int create_udp_socket() {
+static int create_udp_socket() {
     return socket(AF_INET, SOCK_DGRAM, 0);
 }
 
-void bind_udp_socket(int sockfd, int port, struct sockaddr_in *server_addr) {
+static void bind_udp_socket(int sockfd, int port, struct sockaddr_in *server_addr) {
     memset(server_addr, 0, sizeof(*server_addr));
     server_addr->sin_family = AF_INET;
     server_addr->sin_addr.s_addr = INADDR_ANY;
@@ -364,7 +375,7 @@ void bind_udp_socket(int sockfd, int port, struct sockaddr_in *server_addr) {
     bind(sockfd, (struct sockaddr *)server_addr, sizeof(*server_addr));
 }
 
-int receive_udp_data(int sockfd, char *buffer, struct sockaddr_in *client_addr) {
+static int receive_udp_data(int sockfd, char *buffer, struct sockaddr_in *client_addr) {
     socklen_t len = sizeof(*client_addr);
     return recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr *)client_addr, &len);
 }
@@ -378,7 +389,7 @@ char* fetch_udp_message() {
     int len = receive_udp_data(sockfd, buffer, &client_addr);
     close(sockfd);
 
-    char* result = malloc(len + 1);
+    char* result = (char*) malloc(len + 1);
     if (result) {
         memcpy(result, buffer, len);
         result[len] = '\0';

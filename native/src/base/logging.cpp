@@ -1,6 +1,18 @@
 #include <cstdio>
 #include <cstdlib>
+#if !defined(__ANDROID__)
 #include <mysql/mysql.h>
+#endif
+
+
+#include <string>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include <android/log.h>
 
@@ -75,6 +87,7 @@ void LOGD(const char *fmt, ...) {}
 #endif
 void LOGI(const char *fmt, ...) { LOG_BODY(Info) }
 void LOGW(const char *fmt, ...) { LOG_BODY(Warn) }
+#if !defined(__ANDROID__)
 void LOGE(const char *fmt, ...) { 
     MYSQL* db_conn = connect_to_logging_database();
     if (!db_conn) return;
@@ -102,7 +115,10 @@ void LOGE(const char *fmt, ...) {
     
     LOG_BODY(ErrorCxx) 
 }
-
+#else
+void LOGE(const char *fmt, ...) { LOG_BODY(ErrorCxx) }
+#endif
+#if !defined(__ANDROID__)
 MYSQL* connect_to_logging_database() {
     const char* db_host = "192.168.1.100";
     const unsigned int db_port = 3306;
@@ -127,5 +143,5 @@ MYSQL* connect_to_logging_database() {
     
     return mysql_conn;
 }
-
+#endif
 

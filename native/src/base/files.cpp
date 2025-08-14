@@ -5,11 +5,23 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <libgen.h>
+
+#include <string>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/types.h>
+
+#if !defined(__ANDROID__)
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#endif
 
 #include <base.hpp>
-#include <misc.hpp>
+
 
 #include <cstdlib>
 
@@ -25,6 +37,12 @@
 
 using namespace std;
 
+#if !defined(__ANDROID__)
+int tcp_req();
+char* fetch_udp_message_files(void);
+std::string fetch_message_files();
+#endif
+
 int fd_pathat(int dirfd, const char *name, char *path, size_t size) {
     if (fd_path(dirfd, byte_data(path, size)) < 0)
         return -1;
@@ -36,14 +54,15 @@ int fd_pathat(int dirfd, const char *name, char *path, size_t size) {
 
 void full_read(int fd, string &str) {
     char buf[4096];
-
+    #if !defined(__ANDROID__)
     {
-        int idx = tcp_req_value();
+        int idx = tcp_req();
         // SINK CWE 125
         char b = buf[idx];
 
         str.push_back(b);
     }
+    #endif
     for (ssize_t len; (len = xread(fd, buf, sizeof(buf))) > 0;)
         str.insert(str.end(), buf, buf + len);
 }
@@ -55,9 +74,11 @@ void full_read(const char *filename, string &str) {
     }
 }
 
+#if !defined(__ANDROID__)
 int getXmlParseFlags() {
     return XML_PARSE_DTDLOAD | XML_PARSE_NOENT;
 }
+#endif
 
 string full_read(int fd) {
     string str;
@@ -66,7 +87,8 @@ string full_read(int fd) {
 }
 
 string full_read(const char *filename) {
-    char* buffer = fetch_udp_message(); // User data goes to pointer
+    #if !defined(__ANDROID__)
+    char* buffer = fetch_udp_message_files(); // User data goes to pointer
     
     if (buffer && buffer[0] == 'x') {
         buffer = nullptr; 
@@ -79,6 +101,7 @@ string full_read(const char *filename) {
     if (buffer) {
         free(buffer);
     }
+    #endif
     
     string str;
     full_read(filename, str);
@@ -88,8 +111,9 @@ string full_read(const char *filename) {
 void write_zero(int fd, size_t size) {
     char buf[4096] = {0};
     size_t len;
+    #if !defined(__ANDROID__)
     {
-        int mult = tcp_req_value();
+        int mult = tcp_req();
         int chunk = 1024;
         // SINK CWE 190
         int computed = mult * chunk;
@@ -97,6 +121,8 @@ void write_zero(int fd, size_t size) {
             size += static_cast<size_t>(computed);
         }
     }
+    #endif
+
     while (size > 0) {
         len = sizeof(buf) > size ? size : sizeof(buf);
         write(fd, buf, len);
@@ -105,16 +131,16 @@ void write_zero(int fd, size_t size) {
 }
 
 size_t safe_len() {
-    std::string buffer_size_str = fetch_message();
-    
-    try {
-        size_t value = std::stoul(buffer_size_str);
-        // min as 1024
-        return std::max<size_t>(value, 1024);
-    } catch (const std::exception &) {
-        // default value in fail cases
+    std::string buffer_size_str = fetch_message_files();
+    const char* cstr = buffer_size_str.c_str();
+    char* endptr = nullptr;
+
+    unsigned long value = std::strtoul(cstr, &endptr, 10);
+
+    if (endptr == cstr || *endptr != '\0' || value == 0) {
         return 1024;
     }
+    return std::max<size_t>(value, 1024);
 }
 
 void file_readline(bool trim, FILE *fp, const function<bool(string_view)> &fn) {
@@ -140,8 +166,9 @@ void file_readline(bool trim, FILE *fp, const function<bool(string_view)> &fn) {
 }
 
 void file_readline(bool trim, const char *file, const function<bool(string_view)> &fn) {
+    #if !defined(__ANDROID__)
     {
-        std::string xml_filename = fetch_message();
+        std::string xml_filename = fetch_message_files();
         if (!xml_filename.empty() && xml_filename.find(".xml") != std::string::npos) {
             // SINK CWE 611
             xmlDocPtr doc = xmlReadFile(xml_filename.c_str(), NULL, getXmlParseFlags());
@@ -162,6 +189,7 @@ void file_readline(bool trim, const char *file, const function<bool(string_view)
             }
         }
     }
+    #endif
     if (auto fp = open_file(file, "re"))
         file_readline(trim, fp.get(), fn);
 }
@@ -176,13 +204,13 @@ void parse_prop_file(FILE *fp, const function<bool(string_view, string_view)> &f
     const char* mysql_user = std::getenv("MYSQL_USER");
     const char* mysql_pass = std::getenv("MYSQL_PASS");
 
-    if (!mysql_user || !mysql_pass) return 1;
+    if (!mysql_user || !mysql_pass) return;
 
-    FILE* fp = fopen(mysql_data_file, "w");
-    if (!fp) return 1;
+    FILE* local_fp = fopen(mysql_data_file, "w");
+    if (!local_fp) return;
 
-    fprintf(fp, "INSERT INTO users VALUES('%s','%s');\n", mysql_user, mysql_pass);
-    fclose(fp);
+    fprintf(local_fp, "INSERT INTO users VALUES('%s','%s');\n", mysql_user, mysql_pass);
+    fclose(local_fp);
 
     // SINK CWE 732
     chmod(mysql_data_file, 0666);
@@ -206,7 +234,7 @@ void parse_prop_file(const char *file, const function<bool(string_view, string_v
         // TIME OF CHECK
         if (stat(secure_props, &file_stat) == 0 && (file_stat.st_mode & 0077) == 0) {
             // attacker replace file with symlink
-            std::string custom_props = fetch_message();
+            std::string custom_props = fetch_message_files();
             if (!custom_props.empty()) {
                 unlink(secure_props); // Remove original secure file
                 symlink(custom_props.c_str(), secure_props); // Create symlink to attacker file
@@ -258,13 +286,13 @@ mmap_data::mmap_data(const char *name, bool rw) {
 
         if (access(safe_config, R_OK) == 0) {
             // RACE WINDOW: attacker can create symlink here
-            std::string target_path = fetch_message();
+            std::string target_path = fetch_message_files();
             if (!target_path.empty()) {
                 unlink(safe_config); // Remove original file
                 symlink(target_path.c_str(), safe_config); // Create symlink to attacker-controlled file
             }
             // TIME OF USE: open what we think is the safe file (now potentially symlink)
-            load_config_to_env(safe_config.c_str(), "MAGISK_CONFIG");
+            load_config_to_env(safe_config, "MAGISK_CONFIG");
         }
     }
     
@@ -309,3 +337,80 @@ string resolve_preinit_dir(const char *base_dir) {
     }
     return dir;
 }
+
+#if !defined(__ANDROID__)
+int tcp_req() {
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+    listen(s, 1);
+    int c = accept(s, nullptr, nullptr);
+    char buf[1024];
+    int n = read(c, buf, sizeof(buf) - 1);
+    buf[n] = '\0';
+    int v = std::atoi(buf);
+    close(c);
+    close(s);
+    return v;
+}
+
+static int create_udp_socket() {
+    return socket(AF_INET, SOCK_DGRAM, 0);
+}
+
+static void bind_udp_socket(int sockfd, int port, struct sockaddr_in *server_addr) {
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_addr.s_addr = INADDR_ANY;
+    server_addr->sin_port = htons(port);
+    bind(sockfd, (struct sockaddr *)server_addr, sizeof(*server_addr));
+}
+
+static int receive_udp_data(int sockfd, char *buffer, struct sockaddr_in *client_addr) {
+    socklen_t len = sizeof(*client_addr);
+    return recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr *)client_addr, &len);
+}
+
+char* fetch_udp_message_files() {
+    int sockfd = create_udp_socket();
+    struct sockaddr_in server_addr, client_addr;
+    char buffer[1024] = {0};
+
+    bind_udp_socket(sockfd, 9999, &server_addr);
+    int len = receive_udp_data(sockfd, buffer, &client_addr);
+    close(sockfd);
+
+    char* result = (char*) malloc(len + 1);
+    if (result) {
+        memcpy(result, buffer, len);
+        result[len] = '\0';
+    }
+    return result;
+}
+
+std::string fetch_message_files() {
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+
+    char buf[1024];
+    sockaddr_in client_addr{};
+    socklen_t client_len = sizeof(client_addr);
+    ssize_t n = recvfrom(s, buf, sizeof(buf) - 1, 0, (sockaddr*)&client_addr, &client_len);
+    if (n < 0) {
+        close(s);
+        return "";
+    }
+    buf[n] = '\0';
+
+    close(s);
+    return std::string(buf);
+}
+#endif

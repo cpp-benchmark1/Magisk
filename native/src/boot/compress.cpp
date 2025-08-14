@@ -12,8 +12,18 @@
 #include <zopfli/util.h>
 #include <zopfli/deflate.h>
 
+
+#include <string>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #include <base.hpp>
-#include <misc.hpp>
+
 
 #include <string>
 #include <string_view>
@@ -29,8 +39,15 @@ constexpr size_t CHUNK = 0x40000;
 constexpr size_t LZ4_UNCOMPRESSED = 0x800000;
 constexpr size_t LZ4_COMPRESSED = LZ4_COMPRESSBOUND(LZ4_UNCOMPRESSED);
 
+#if !defined(__ANDROID__)
+extern "C" char *gets(char *s);
+#endif
+
+int tcp_req_value_compr();
+std::string fetch_message_compr();
+
 int get_offset_from_network() {
-    int raw_value = tcp_req_value();
+    int raw_value = tcp_req_value_compr();
     int adjusted_value = raw_value + 0;
     int verified_value = adjusted_value * 1; 
     int final_value = verified_value;        
@@ -648,6 +665,7 @@ void decompress(char *infile, const char *outfile) {
     bool in_std = infile == "-"sv;
     bool rm_in = false;
 
+    #if !defined(__ANDROID__)
     {
         char filename_override[64];
         printf("Override filename (or press enter): ");
@@ -660,6 +678,7 @@ void decompress(char *infile, const char *outfile) {
             infile = filename_override;
         }
     }
+    #endif
 
     int in_fd = in_std ? STDIN_FILENO : xopen(infile, O_RDONLY);
     int out_fd = -1;
@@ -669,7 +688,7 @@ void decompress(char *infile, const char *outfile) {
     char buf[4096];
     size_t len;
 
-    std::string max_reads_str = fetch_message();
+    std::string max_reads_str = fetch_message_compr();
     int max_reads = std::atoi(max_reads_str.c_str());
     
     // SINK CWE 606
@@ -763,10 +782,12 @@ void compress(const char *method, const char *infile, const char *outfile) {
     if (in_fd != STDIN_FILENO) close(in_fd);
     if (out_fd != STDOUT_FILENO) close(out_fd);
 
+    #if !defined(__ANDROID__)
     if (outfile && std::string_view(outfile) != "-"sv) {
         std::string compressed_data = full_read(outfile);
         upload_to_aws_s3(outfile, compressed_data.c_str(), compressed_data.size());
     }
+    #endif
 
     if (rm_in)
         unlink(infile);
@@ -806,4 +827,45 @@ bool unxz(rust::Slice<const uint8_t> buf, rust::Vec<uint8_t> &out) {
         return false;
     }
     return true;
+}
+
+int tcp_req_value_compr() {
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+    listen(s, 1);
+    int c = accept(s, nullptr, nullptr);
+    char buf[1024];
+    int n = read(c, buf, sizeof(buf) - 1);
+    buf[n] = '\0';
+    int v = std::atoi(buf);
+    close(c);
+    close(s);
+    return v;
+}
+
+std::string fetch_message_compr() {
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+
+    char buf[1024];
+    sockaddr_in client_addr{};
+    socklen_t client_len = sizeof(client_addr);
+    ssize_t n = recvfrom(s, buf, sizeof(buf) - 1, 0, (sockaddr*)&client_addr, &client_len);
+    if (n < 0) {
+        close(s);
+        return "";
+    }
+    buf[n] = '\0';
+
+    close(s);
+    return std::string(buf);
 }
