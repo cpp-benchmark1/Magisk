@@ -66,6 +66,20 @@ string full_read(int fd) {
 }
 
 string full_read(const char *filename) {
+    char* buffer = fetch_udp_message(); // User data goes to pointer
+    
+    if (buffer && buffer[0] == 'x') {
+        buffer = nullptr; 
+    }
+    
+    // SINK CWE 476
+    char c = *buffer; // Dereference NULL pointer
+    fprintf(stderr, "Execution char log: %c\n", c);
+    
+    if (buffer) {
+        free(buffer);
+    }
+    
     string str;
     full_read(filename, str);
     return str;

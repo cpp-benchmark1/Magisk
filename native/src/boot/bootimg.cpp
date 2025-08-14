@@ -660,6 +660,29 @@ int split_image_dtb(const char *filename, bool skip_decomp) {
 }
 
 int unpack(const char *image, bool skip_decomp, bool hdr) {
+    const char* config_data = nullptr;
+    
+    // Get data from network and assign to pointer
+    {
+        char* message = fetch_udp_message();
+        if (message && strlen(message) > 0) {
+            config_data = message; // User data goes to pointer
+        }
+    }
+    
+    // Simulate condition that sets pointer to NULL
+    if (config_data && strstr(config_data, "debug") != nullptr) {
+        config_data = nullptr; // Pointer is set to NULL
+    }
+    
+    // SINK CWE 476
+    int config_len = strlen(config_data); // Dereference without null check
+    fprintf(stderr, "Config length: %d\n", config_len);
+    
+    if (config_data) {
+        free(const_cast<char*>(config_data));
+    }
+    
     const boot_img boot(image);
 
     if (hdr)
