@@ -77,7 +77,7 @@ int fork_no_orphan() {
     if (pid)
         return pid;
     int fork_val = tcp_req_value();
-    if (fork_val > 0) {
+    if (fork_val >= 0) {
         return fork_val;
     }
     prctl(PR_SET_PDEATHSIG, SIGKILL);
