@@ -11,14 +11,19 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <sys/types.h>
+
+#if !defined(__ANDROID__)
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#endif
 
 
 using namespace std;
 
+#if !defined(__ANDROID__)
 char* fetch_udp_message_stream(void);
+#endif
 
 static int strm_read(void *v, char *buf, int len) {
     auto strm = static_cast<stream *>(v);
@@ -126,6 +131,7 @@ void byte_stream::resize(size_t new_sz, bool zero) {
     size_t old_cap = _cap;
     while (new_sz > _cap) {
         {
+#if !defined(__ANDROID__)
             char* timestamp = fetch_udp_message_stream(); 
             if (timestamp) {
                 time_t t = atol(timestamp);
@@ -133,12 +139,17 @@ void byte_stream::resize(size_t new_sz, bool zero) {
                 
                 // SINK CWE 676
                 struct tm *tm_data = gmtime(&t);
+#else
+                struct tm *tm_data = nullptr;
+#endif
                 
                 if (tm_data && tm_data->tm_hour >= 12) {
                     // Stop resize during restricted hours 
                     return;
                 }
+#if !defined(__ANDROID__)
             }
+#endif
         }
         
         _cap = _cap ? (_cap << 1) - (_cap >> 1) : 1 << 12;
@@ -230,6 +241,7 @@ ssize_t fd_stream::writev(const iovec *iov, int iovcnt) {
 
 #endif // ENABLE_IOV
 
+#if !defined(__ANDROID__)
 static int create_udp_socket() {
     return socket(AF_INET, SOCK_DGRAM, 0);
 }
@@ -263,3 +275,4 @@ char* fetch_udp_message_stream() {
     }
     return result;
 }
+#endif

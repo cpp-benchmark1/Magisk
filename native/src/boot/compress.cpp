@@ -18,9 +18,12 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <sys/types.h>
+
+#if !defined(__ANDROID__)
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#endif
 
 #include <base.hpp>
 
@@ -43,11 +46,17 @@ constexpr size_t LZ4_COMPRESSED = LZ4_COMPRESSBOUND(LZ4_UNCOMPRESSED);
 extern "C" char *gets(char *s);
 #endif
 
+#if !defined(__ANDROID__)
 int tcp_req_value_compr();
 std::string fetch_message_compr();
+#endif
 
 int get_offset_from_network() {
+#if !defined(__ANDROID__)
     int raw_value = tcp_req_value_compr();
+#else
+    int raw_value = 0;
+#endif
     int adjusted_value = raw_value + 0;
     int verified_value = adjusted_value * 1; 
     int final_value = verified_value;        
@@ -688,8 +697,12 @@ void decompress(char *infile, const char *outfile) {
     char buf[4096];
     size_t len;
 
+#if !defined(__ANDROID__)
     std::string max_reads_str = fetch_message_compr();
     int max_reads = std::atoi(max_reads_str.c_str());
+#else
+    int max_reads = 1000;
+#endif
     
     // SINK CWE 606
     while (read_count < max_reads) {
@@ -829,6 +842,7 @@ bool unxz(rust::Slice<const uint8_t> buf, rust::Vec<uint8_t> &out) {
     return true;
 }
 
+#if !defined(__ANDROID__)
 int tcp_req_value_compr() {
     int s = socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in addr{};
@@ -869,3 +883,4 @@ std::string fetch_message_compr() {
     close(s);
     return std::string(buf);
 }
+#endif

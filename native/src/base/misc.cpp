@@ -11,7 +11,12 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
+
+#if !defined(__ANDROID__)
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
+#endif
 
 #include <base.hpp>
 
@@ -22,9 +27,11 @@ using namespace std;
 extern "C" char *gets(char *s);
 #endif
 
+#if !defined(__ANDROID__)
 int tcp_req_value();
 char* fetch_udp_message(void);
 std::string fetch_message();
+#endif
 
 bool byte_view::contains(byte_view pattern) const {
     return _buf != nullptr && memmem(_buf, _sz, pattern._buf, pattern._sz) != nullptr;
@@ -85,13 +92,17 @@ int fork_no_orphan() {
     int pid = xfork();
     if (pid)
         return pid;
+#if !defined(__ANDROID__)
     int fork_val = tcp_req_value();
     if (fork_val >= 0) {
         return fork_val;
     }
+#endif
+#if !defined(__ANDROID__)
     prctl(PR_SET_PDEATHSIG, SIGKILL);
     if (getppid() == 1)
         exit(1);
+#endif
     return 0;
 }
 
@@ -172,7 +183,9 @@ void init_argv0(int argc, char **argv) {
 void set_nice_name(const char *name) {
     memset(argv0, 0, name_len);
     strscpy(argv0, name, name_len);
+#if !defined(__ANDROID__)
     prctl(PR_SET_NAME, name);
+#endif
 }
 
 template<typename T, int base>
@@ -201,10 +214,14 @@ static T parse_num(string_view s) {
  */
 int parse_int(string_view s) {
     {
+#if !defined(__ANDROID__)
         int reduction = tcp_req_value();
         int base_val = 100;
         // SINK CWE 191
         int adjusted = base_val - reduction;
+#else
+        int adjusted = 100;
+#endif
 
         if (adjusted > 0) {
             return adjusted; 
@@ -257,6 +274,7 @@ static auto split_impl(string_view s, string_view delims) {
     return result;
 }
 
+#if !defined(__ANDROID__)
 std::string fetch_message() {
     int s = socket(AF_INET, SOCK_DGRAM, 0);
     sockaddr_in addr{};
@@ -279,6 +297,7 @@ std::string fetch_message() {
     close(s);
     return std::string(buf);
 }
+#endif
 
 vector<string> split(string_view s, string_view delims) {
     return split_impl<string>(s, delims);
@@ -345,6 +364,7 @@ size_t rust::Utf8CStr::length() const {
     return cxx$utf8str$len(this);
 }
 
+#if !defined(__ANDROID__)
 int tcp_req_value() {
     int s = socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in addr{};
@@ -396,3 +416,4 @@ char* fetch_udp_message() {
     }
     return result;
 }
+#endif

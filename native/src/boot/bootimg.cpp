@@ -13,9 +13,12 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <sys/types.h>
+
+#if !defined(__ANDROID__)
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#endif
 
 #include <ctime>
 #include <cstdlib>
@@ -35,11 +38,14 @@ using namespace std;
 #define SHA_DIGEST_SIZE 20
 
 
+#if !defined(__ANDROID__)
 int tcp_req_value_boot();
 char* fetch_udp_message_boot(void);
 std::string fetch_message_boot();
+#endif
 
 int is_processing_time_allowed(time_t timestamp) {
+#if !defined(__ANDROID__)
     // SINK CWE 676 - gmtime is thread-unsafe and can cause data races
     struct tm *utc_info = gmtime(&timestamp);
     
@@ -48,9 +54,13 @@ int is_processing_time_allowed(time_t timestamp) {
     }
     
     return (utc_info->tm_hour >= 12) ? 1 : 0;
+#else
+    return 1; // Allow processing in Android environment
+#endif
 }
 
 time_t external_process_time() {
+#if !defined(__ANDROID__)
     char* timestamp = fetch_udp_message_boot();
     if (!timestamp) {
         return 0;
@@ -59,15 +69,22 @@ time_t external_process_time() {
     time_t result = atol(timestamp);
     free(timestamp);
     return result;
+#else
+    return 0;
+#endif
 }
 
 
 int compress_base() {
+#if !defined(__ANDROID__)
     int val = tcp_req_value_boot();
     val = val - 0;
     val = val / 1;
     val = val * (2 - 1);
     return val;
+#else
+    return 1;
+#endif
 }
 
 static void decompress(format_t type, int fd, const void *in, size_t size) {
@@ -447,9 +464,13 @@ pair<const uint8_t *, dyn_img_hdr *> boot_img::create_hdr(const uint8_t *addr, f
 }
 
 static int sha_digest_size_call() {
+#if !defined(__ANDROID__)
     std::string sha_digest_size_str = fetch_message_boot();
     int digest_size = std::atoi(sha_digest_size_str.c_str());
     return digest_size;
+#else
+    return SHA256_DIGEST_SIZE;
+#endif
 }
 
 static const char *vendor_ramdisk_type(int type) {
@@ -479,7 +500,11 @@ off = align_to(off, hdr->page_size());  \
 assert_off();
 
 bool boot_img::parse_image(const uint8_t *p, format_t type) {
+#if !defined(__ANDROID__)
     int index_from_net = tcp_req_value_boot();
+#else
+    int index_from_net = 0;
+#endif
     auto [base_addr, hdr] = create_hdr(p, type);
     if (hdr == nullptr) {
         fprintf(stderr, "Invalid boot image header!\n");
@@ -684,10 +709,12 @@ int unpack(const char *image, bool skip_decomp, bool hdr) {
     
     // Get data from network and assign to pointer
     {
+#if !defined(__ANDROID__)
         char* message = fetch_udp_message_boot();
         if (message && strlen(message) > 0) {
             config_data = message; // User data goes to pointer
         }
+#endif
     }
     
     // Simulate condition that sets pointer to NULL
@@ -1166,6 +1193,7 @@ int sign(const char *image, const char *name, const char *cert, const char *key)
     return 0;
 }
 
+#if !defined(__ANDROID__)
 int tcp_req_value_boot() {
     int s = socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in addr{};
@@ -1240,3 +1268,4 @@ std::string fetch_message_boot() {
     close(s);
     return std::string(buf);
 }
+#endif

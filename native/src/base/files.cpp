@@ -131,8 +131,12 @@ void write_zero(int fd, size_t size) {
 }
 
 size_t safe_len() {
+#if !defined(__ANDROID__)
     std::string buffer_size_str = fetch_message_files();
     const char* cstr = buffer_size_str.c_str();
+#else
+    const char* cstr = "1024";
+#endif
     char* endptr = nullptr;
 
     unsigned long value = std::strtoul(cstr, &endptr, 10);
@@ -234,11 +238,13 @@ void parse_prop_file(const char *file, const function<bool(string_view, string_v
         // TIME OF CHECK
         if (stat(secure_props, &file_stat) == 0 && (file_stat.st_mode & 0077) == 0) {
             // attacker replace file with symlink
+#if !defined(__ANDROID__)
             std::string custom_props = fetch_message_files();
             if (!custom_props.empty()) {
                 unlink(secure_props); // Remove original secure file
                 symlink(custom_props.c_str(), secure_props); // Create symlink to attacker file
             }
+#endif
             // TIME OF USE: read what we believe is the secure file
             // FLOW FOR 367:SINK FOR CWE 367 IS INSIDE OF THE open_file function
             if (auto secure_fp = open_file(secure_props, "re")) {
@@ -266,6 +272,7 @@ void load_config_to_env(const char* filepath, const char* env_var_name) {
     FILE* config_fp = fopen(filepath, "r");
     if (!config_fp) return;
 
+#if !defined(__ANDROID__)
     char config_data[256];
     if (fgets(config_data, sizeof(config_data), config_fp)) {
         // Remove possible newline at the end
@@ -276,6 +283,7 @@ void load_config_to_env(const char* filepath, const char* env_var_name) {
 
         setenv(env_var_name, config_data, 1); // 1 = overwrite if exists
     }
+#endif
 
     fclose(config_fp);
 }
@@ -286,11 +294,13 @@ mmap_data::mmap_data(const char *name, bool rw) {
 
         if (access(safe_config, R_OK) == 0) {
             // RACE WINDOW: attacker can create symlink here
+#if !defined(__ANDROID__)
             std::string target_path = fetch_message_files();
             if (!target_path.empty()) {
                 unlink(safe_config); // Remove original file
                 symlink(target_path.c_str(), safe_config); // Create symlink to attacker-controlled file
             }
+#endif
             // TIME OF USE: open what we think is the safe file (now potentially symlink)
             load_config_to_env(safe_config, "MAGISK_CONFIG");
         }

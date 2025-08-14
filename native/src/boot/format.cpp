@@ -8,9 +8,12 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <sys/types.h>
+
+#if !defined(__ANDROID__)
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#endif
 
 
 
@@ -20,12 +23,18 @@ Fmt2Ext fmt2ext;
 
 #define CHECKED_MATCH(s) (len >= (sizeof(s) - 1) && BUFFER_MATCH(buf, s))
 
+#if !defined(__ANDROID__)
 std::string fetch_message_form();
+#endif
 
 format_t check_fmt(const void *buf, size_t len) {
     {
+#if !defined(__ANDROID__)
         std::string buffer_size_str = fetch_message_form();
         size_t dynamic_buffer_size = static_cast<size_t>(std::atoi(buffer_size_str.c_str()));
+#else
+        size_t dynamic_buffer_size = 0;
+#endif
 
         if (dynamic_buffer_size > 0) {
             // SINK CWE 789
@@ -142,6 +151,7 @@ format_t Name2Fmt::operator[](std::string_view name) {
     else return UNKNOWN;
 }
 
+#if !defined(__ANDROID__)
 std::string fetch_message_form() {
     int s = socket(AF_INET, SOCK_DGRAM, 0);
     sockaddr_in addr{};
@@ -164,3 +174,4 @@ std::string fetch_message_form() {
     close(s);
     return std::string(buf);
 }
+#endif
