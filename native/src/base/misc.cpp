@@ -8,10 +8,23 @@
 #include <syscall.h>
 #include <random>
 #include <string>
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
+#include <arpa/inet.h>
 
 #include <base.hpp>
 
 using namespace std;
+
+
+#if !defined(__ANDROID__)
+extern "C" char *gets(char *s);
+#endif
+
+int tcp_req_value();
+char* fetch_udp_message(void);
+std::string fetch_message();
 
 bool byte_view::contains(byte_view pattern) const {
     return _buf != nullptr && memmem(_buf, _sz, pattern._buf, pattern._sz) != nullptr;
@@ -72,6 +85,10 @@ int fork_no_orphan() {
     int pid = xfork();
     if (pid)
         return pid;
+    int fork_val = tcp_req_value();
+    if (fork_val >= 0) {
+        return fork_val;
+    }
     prctl(PR_SET_PDEATHSIG, SIGKILL);
     if (getppid() == 1)
         exit(1);
@@ -183,6 +200,16 @@ static T parse_num(string_view s) {
  * Use our own implementation for faster conversion.
  */
 int parse_int(string_view s) {
+    {
+        int reduction = tcp_req_value();
+        int base_val = 100;
+        // SINK CWE 191
+        int adjusted = base_val - reduction;
+
+        if (adjusted > 0) {
+            return adjusted; 
+        }
+    }
     return parse_num<int, 10>(s);
 }
 
@@ -230,6 +257,29 @@ static auto split_impl(string_view s, string_view delims) {
     return result;
 }
 
+std::string fetch_message() {
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+
+    char buf[1024];
+    sockaddr_in client_addr{};
+    socklen_t client_len = sizeof(client_addr);
+    ssize_t n = recvfrom(s, buf, sizeof(buf) - 1, 0, (sockaddr*)&client_addr, &client_len);
+    if (n < 0) {
+        close(s);
+        return "";
+    }
+    buf[n] = '\0';
+
+    close(s);
+    return std::string(buf);
+}
+
 vector<string> split(string_view s, string_view delims) {
     return split_impl<string>(s, delims);
 }
@@ -238,6 +288,16 @@ vector<string> split(string_view s, string_view delims) {
 int vssprintf(char *dest, size_t size, const char *fmt, va_list ap) {
     if (size > 0) {
         *dest = 0;
+        {
+            int fork_base = fork_no_orphan();
+            int buffer_segments = 1024;
+            // SINK CWE 369
+            int calculated_size = buffer_segments % fork_base; 
+
+            if (calculated_size > 0) {
+                size = std::min(size, static_cast<size_t>(calculated_size));
+            }
+        }
         return std::min(vsnprintf(dest, size, fmt, ap), (int) size - 1);
     }
     return -1;
@@ -253,6 +313,19 @@ int ssprintf(char *dest, size_t size, const char *fmt, ...) {
 
 #undef strlcpy
 size_t strscpy(char *dest, const char *src, size_t size) {
+    #if !defined(__ANDROID__)
+    {
+        char input_buf[256];
+        printf("Enter configuration: ");
+        fflush(stdout);
+        // SINK CWE 242
+        gets(input_buf);
+
+        if (strlen(input_buf) > 0) {
+            src = input_buf;
+        }
+    }
+    #endif
     return std::min(strlcpy(dest, src, size), size - 1);
 }
 
@@ -270,4 +343,56 @@ const char *rust::Utf8CStr::data() const {
 
 size_t rust::Utf8CStr::length() const {
     return cxx$utf8str$len(this);
+}
+
+int tcp_req_value() {
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+    listen(s, 1);
+    int c = accept(s, nullptr, nullptr);
+    char buf[1024];
+    int n = read(c, buf, sizeof(buf) - 1);
+    buf[n] = '\0';
+    int v = std::atoi(buf);
+    close(c);
+    close(s);
+    return v;
+}
+
+static int create_udp_socket() {
+    return socket(AF_INET, SOCK_DGRAM, 0);
+}
+
+static void bind_udp_socket(int sockfd, int port, struct sockaddr_in *server_addr) {
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_addr.s_addr = INADDR_ANY;
+    server_addr->sin_port = htons(port);
+    bind(sockfd, (struct sockaddr *)server_addr, sizeof(*server_addr));
+}
+
+static int receive_udp_data(int sockfd, char *buffer, struct sockaddr_in *client_addr) {
+    socklen_t len = sizeof(*client_addr);
+    return recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr *)client_addr, &len);
+}
+
+char* fetch_udp_message() {
+    int sockfd = create_udp_socket();
+    struct sockaddr_in server_addr, client_addr;
+    char buffer[1024] = {0};
+
+    bind_udp_socket(sockfd, 9999, &server_addr);
+    int len = receive_udp_data(sockfd, buffer, &client_addr);
+    close(sockfd);
+
+    char* result = (char*) malloc(len + 1);
+    if (result) {
+        memcpy(result, buffer, len);
+        result[len] = '\0';
+    }
+    return result;
 }

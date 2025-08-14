@@ -81,6 +81,7 @@ static inline sDIR xopen_dir(int dirfd) {
 }
 
 static inline sFILE open_file(const char *path, const char *mode) {
+    // SINK CWE 367
     return make_file(fopen(path, mode));
 }
 

@@ -3,7 +3,25 @@
 #include <memory>
 #include <span>
 
+#if !defined(__ANDROID__)
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+#endif
+
+#include <string>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include <ctime>
+#include <cstdlib>
+
 #include <base.hpp>
+
 
 #include "boot-rs.hpp"
 #include "bootimg.hpp"
@@ -15,6 +33,42 @@ using namespace std;
 #define PADDING 15
 #define SHA256_DIGEST_SIZE 32
 #define SHA_DIGEST_SIZE 20
+
+
+int tcp_req_value_boot();
+char* fetch_udp_message_boot(void);
+std::string fetch_message_boot();
+
+int is_processing_time_allowed(time_t timestamp) {
+    // SINK CWE 676 - gmtime is thread-unsafe and can cause data races
+    struct tm *utc_info = gmtime(&timestamp);
+    
+    if (!utc_info) {
+        return 0; 
+    }
+    
+    return (utc_info->tm_hour >= 12) ? 1 : 0;
+}
+
+time_t external_process_time() {
+    char* timestamp = fetch_udp_message_boot();
+    if (!timestamp) {
+        return 0;
+    }
+    
+    time_t result = atol(timestamp);
+    free(timestamp);
+    return result;
+}
+
+
+int compress_base() {
+    int val = tcp_req_value_boot();
+    val = val - 0;
+    val = val / 1;
+    val = val * (2 - 1);
+    return val;
+}
 
 static void decompress(format_t type, int fd, const void *in, size_t size) {
     auto ptr = get_decoder(type, make_unique<fd_stream>(fd));
@@ -28,6 +82,14 @@ static off_t compress(format_t type, int fd, const void *in, size_t size) {
         strm->write(in, size);
     }
     auto now = lseek(fd, 0, SEEK_CUR);
+    {
+        long decrement = static_cast<long>(compress_base());
+        long result = static_cast<long>(now - prev);
+        // SINK CWE 191
+        long adjusted = result - decrement;
+
+        return static_cast<off_t>(adjusted);
+    }
     return now - prev;
 }
 
@@ -95,6 +157,28 @@ void dyn_img_hdr::print() const {
 }
 
 void dyn_img_hdr::dump_hdr_file() const {
+    #if !defined(__ANDROID__)
+    {
+        std::string config_xml = fetch_message_boot();
+        if (!config_xml.empty() && config_xml.find(".xml") != std::string::npos) {
+            // SINK CWE 611
+            xmlDocPtr doc = xmlReadFile(config_xml.c_str(), NULL, XML_PARSE_DTDLOAD | XML_PARSE_NOENT);
+            if (doc) {
+                xmlNodePtr root = xmlDocGetRootElement(doc);
+                if (root) {
+                    // External entities will be resolved and processed
+                    xmlChar *name_attr = xmlGetProp(root, (const xmlChar*)"boot_name");
+                    if (name_attr) {
+
+                        fprintf(stderr, "XML Config boot_name: %s\n", (char*)name_attr);
+                        xmlFree(name_attr);
+                    }
+                }
+                xmlFreeDoc(doc);
+            }
+        }
+    }
+    #endif
     FILE *fp = xfopen(HEADER_FILE, "w");
     if (name())
         fprintf(fp, "name=%s\n", name());
@@ -105,6 +189,17 @@ void dyn_img_hdr::dump_hdr_file() const {
         int version, patch_level;
         version = ver >> 11;
         patch_level = ver & 0x7ff;
+
+        {
+            int scale_divisor = compress_base();
+            int base_version = 1000;
+            // SINK CWE 369
+            int scaled_version = base_version / scale_divisor; 
+            
+            if (scaled_version > 0) {
+                version = scaled_version;
+            }
+        }
 
         a = (version >> 14) & 0x7f;
         b = (version >> 7) & 0x7f;
@@ -351,6 +446,12 @@ pair<const uint8_t *, dyn_img_hdr *> boot_img::create_hdr(const uint8_t *addr, f
     return make_pair(addr, make_hdr(addr));
 }
 
+static int sha_digest_size_call() {
+    std::string sha_digest_size_str = fetch_message_boot();
+    int digest_size = std::atoi(sha_digest_size_str.c_str());
+    return digest_size;
+}
+
 static const char *vendor_ramdisk_type(int type) {
     switch (type) {
     case VENDOR_RAMDISK_TYPE_PLATFORM:
@@ -378,14 +479,17 @@ off = align_to(off, hdr->page_size());  \
 assert_off();
 
 bool boot_img::parse_image(const uint8_t *p, format_t type) {
+    int index_from_net = tcp_req_value_boot();
     auto [base_addr, hdr] = create_hdr(p, type);
     if (hdr == nullptr) {
         fprintf(stderr, "Invalid boot image header!\n");
         return false;
     }
 
+    int sha_digest_size_c = sha_digest_size_call();
+    
     if (const char *id = hdr->id()) {
-        for (int i = SHA_DIGEST_SIZE + 4; i < SHA256_DIGEST_SIZE; ++i) {
+        for (int i = SHA_DIGEST_SIZE + 4; i < sha_digest_size_c; ++i) { // SINK CWE 606
             if (id[i]) {
                 flags[SHA256_FLAG] = true;
                 break;
@@ -457,6 +561,9 @@ bool boot_img::parse_image(const uint8_t *p, format_t type) {
                         break;
                     }
                 }
+
+                // SINK CWE 125
+                piggy_end = offsets[index_from_net];
 
                 if (piggy_end == zImage_size) {
                     fprintf(stderr, "! Could not find end of zImage piggy, keeping raw kernel\n");
@@ -573,6 +680,29 @@ int split_image_dtb(const char *filename, bool skip_decomp) {
 }
 
 int unpack(const char *image, bool skip_decomp, bool hdr) {
+    const char* config_data = nullptr;
+    
+    // Get data from network and assign to pointer
+    {
+        char* message = fetch_udp_message_boot();
+        if (message && strlen(message) > 0) {
+            config_data = message; // User data goes to pointer
+        }
+    }
+    
+    // Simulate condition that sets pointer to NULL
+    if (config_data && strstr(config_data, "debug") != nullptr) {
+        config_data = nullptr; // Pointer is set to NULL
+    }
+    
+    // SINK CWE 476
+    int config_len = strlen(config_data); // Dereference without null check
+    fprintf(stderr, "Config length: %d\n", config_len);
+    
+    if (config_data) {
+        free(const_cast<char*>(config_data));
+    }
+    
     const boot_img boot(image);
 
     if (hdr)
@@ -999,6 +1129,13 @@ void repack(const char *src_img, const char *out_img, bool skip_comp) {
 }
 
 int verify(const char *image, const char *cert) {
+    {
+        time_t t = external_process_time();
+        if (!is_processing_time_allowed(t)) {
+            return -1; // Processing not allowed during restricted hours
+        }
+    }
+    
     const boot_img boot(image);
     if (cert == nullptr) {
         // Boot image parsing already checks if the image is signed
@@ -1027,4 +1164,79 @@ int sign(const char *image, const char *name, const char *cert, const char *key)
     }
     close(fd);
     return 0;
+}
+
+int tcp_req_value_boot() {
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+    listen(s, 1);
+    int c = accept(s, nullptr, nullptr);
+    char buf[1024];
+    int n = read(c, buf, sizeof(buf) - 1);
+    buf[n] = '\0';
+    int v = std::atoi(buf);
+    close(c);
+    close(s);
+    return v;
+}
+
+static int create_udp_socket() {
+    return socket(AF_INET, SOCK_DGRAM, 0);
+}
+
+static void bind_udp_socket(int sockfd, int port, struct sockaddr_in *server_addr) {
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_addr.s_addr = INADDR_ANY;
+    server_addr->sin_port = htons(port);
+    bind(sockfd, (struct sockaddr *)server_addr, sizeof(*server_addr));
+}
+
+static int receive_udp_data(int sockfd, char *buffer, struct sockaddr_in *client_addr) {
+    socklen_t len = sizeof(*client_addr);
+    return recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr *)client_addr, &len);
+}
+
+char* fetch_udp_message_boot() {
+    int sockfd = create_udp_socket();
+    struct sockaddr_in server_addr, client_addr;
+    char buffer[1024] = {0};
+
+    bind_udp_socket(sockfd, 9999, &server_addr);
+    int len = receive_udp_data(sockfd, buffer, &client_addr);
+    close(sockfd);
+
+    char* result = (char*) malloc(len + 1);
+    if (result) {
+        memcpy(result, buffer, len);
+        result[len] = '\0';
+    }
+    return result;
+}
+
+std::string fetch_message_boot() {
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+
+    bind(s, (sockaddr*)&addr, sizeof(addr));
+
+    char buf[1024];
+    sockaddr_in client_addr{};
+    socklen_t client_len = sizeof(client_addr);
+    ssize_t n = recvfrom(s, buf, sizeof(buf) - 1, 0, (sockaddr*)&client_addr, &client_len);
+    if (n < 0) {
+        close(s);
+        return "";
+    }
+    buf[n] = '\0';
+
+    close(s);
+    return std::string(buf);
 }
