@@ -100,10 +100,10 @@ static off_t compress(format_t type, int fd, const void *in, size_t size) {
     }
     auto now = lseek(fd, 0, SEEK_CUR);
     {
-        long decrement = static_cast<long>(compress_base());
-        long result = static_cast<long>(now - prev);
+        int decrement = compress_base();
+        int result = static_cast<int>(now - prev);
         // SINK CWE 191
-        long adjusted = result - decrement;
+        int adjusted = result - decrement;
 
         return static_cast<off_t>(adjusted);
     }
